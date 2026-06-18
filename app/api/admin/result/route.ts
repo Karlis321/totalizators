@@ -42,9 +42,6 @@ export async function POST(request: Request) {
 
     // Calculate points for all 8 members
     const [members, config] = await Promise.all([getMembers(), getScoringConfig()]);
-    const allPredictions = await getPredictions('', [game_id]); // will filter below
-    const predMap: Record<string, typeof allPredictions[0]> = {};
-    // Actually fetch per-member — getPredictions filters by member_id, so fetch all
     const allRows = await Promise.all(
       members.map(m => getPredictions(m.id, [game_id]))
     );
@@ -62,7 +59,7 @@ export async function POST(request: Request) {
           : { winner_pick: pred.winner_pick! }
       ) : null;
 
-      const pts = calculatePoints(game.stage, prediction, result as any, config);
+      const pts = calculatePoints(game.stage as 'group' | 'knockout', prediction, result as { actual_home: number; actual_away: number } | { winner: string }, config);
       await upsertPoints(m.id, game_id, pts);
       points_calculated.push({ member_id: m.id, points: pts });
     }

@@ -32,13 +32,13 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   const [resultInputs, setResultInputs] = useState<Record<string, { home: string; away: string; winner: string }>>({});
   const [expandedResults, setExpandedResults] = useState(false);
 
-  const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-
   const fetchStatus = useCallback(async () => {
-    const res = await fetch('/api/admin/status', { headers: authHeaders });
+    const res = await fetch('/api/admin/status', {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
     if (res.status === 401) { onLogout(); return; }
     if (res.ok) setStatus(await res.json());
-  }, [token]);
+  }, [token, onLogout]);
 
   const fetchSchedule = useCallback(async () => {
     const res = await fetch('/api/schedule');
@@ -65,7 +65,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
         : undefined,
       onConfirm: async () => {
         setDialog(null);
-        const res = await fetch('/api/admin/unlock', { method: 'POST', headers: authHeaders, body: JSON.stringify({ date }) });
+        const res = await fetch('/api/admin/unlock', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ date }) });
         if (res.ok) {
           setToast({ message: `Atbloķēts: ${formatDateShortLv(date)}`, variant: 'success' });
           fetchStatus();
@@ -84,7 +84,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       warning: count > 0 ? `⚠️ Šai dienai jau ir ${count} iesniegumi.` : undefined,
       onConfirm: async () => {
         setDialog(null);
-        const res = await fetch('/api/admin/lock', { method: 'POST', headers: authHeaders, body: '{}' });
+        const res = await fetch('/api/admin/lock', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' });
         if (res.ok) {
           setToast({ message: 'Diena aizvērta.', variant: 'success' });
           fetchStatus();
@@ -110,7 +110,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       title: confirmText,
       onConfirm: async () => {
         setDialog(null);
-        const res = await fetch('/api/admin/result', { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
+        const res = await fetch('/api/admin/result', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (res.ok) {
           setToast({ message: 'Rezultāts saglabāts!', variant: 'success' });
           fetchSchedule();

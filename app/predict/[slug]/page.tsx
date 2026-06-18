@@ -3,7 +3,7 @@ import AppHeader from '@/components/AppHeader';
 import BottomNav from '@/components/BottomNav';
 import PredictForm from './PredictForm';
 import HistorySection from './HistorySection';
-import { formatDateLv, formatDateShortLv } from '@/lib/utils';
+import { formatDateLv } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
