@@ -8,7 +8,7 @@ type HistoryData = {
     games: {
       game_id: string; home_team: string; away_team: string; stage: string;
       prediction: { home_score: number | null; away_score: number | null; winner_pick: string | null } | null;
-      result: { actual_home: number | null; actual_away: number | null; winner: string | null };
+      result: { actual_home: number | null; actual_away: number | null; winner: string | null } | null;
       points: number | null;
     }[];
   }[];
@@ -22,7 +22,7 @@ function predictionText(
 }
 
 function resultText(
-  res: HistoryData['history'][0]['games'][0]['result']
+  res: NonNullable<HistoryData['history'][0]['games'][0]['result']>
 ): string {
   const score = `${res.actual_home}–${res.actual_away}`;
   return res.winner ? `${score} (${res.winner})` : score;
@@ -51,7 +51,7 @@ export default function HistorySection({ historyData }: { historyData: HistoryDa
                       Mana prognoze: {predictionText(g.prediction)}
                     </p>
                     <p className="text-sm text-grey-600">
-                      Rezultāts: {resultText(g.result)}
+                      Rezultāts: {g.result ? resultText(g.result) : 'Gaida rezultātu'}
                     </p>
                   </div>
                   <PointsBadge points={g.points} />

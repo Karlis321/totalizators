@@ -52,8 +52,9 @@ export default async function PredictPage({ params }: { params: { slug: string }
   const pointsMap: Record<string, number> = {};
   for (const p of memberPoints) pointsMap[p.game_id] = p.points;
 
+  const openDateSet = new Set(openDates);
   const pastGames = allGames
-    .filter(g => resultMap[g.game_id])
+    .filter(g => predMap[g.game_id] && !openDateSet.has(g.date))
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const dateMap: Record<string, typeof pastGames> = {};
@@ -66,7 +67,7 @@ export default async function PredictPage({ params }: { params: { slug: string }
     date,
     games: gms.map(g => {
       const pred = predMap[g.game_id] ?? null;
-      const res = resultMap[g.game_id];
+      const res = resultMap[g.game_id] ?? null;
       return {
         game_id: g.game_id,
         home_team: g.home_team,
@@ -77,11 +78,11 @@ export default async function PredictPage({ params }: { params: { slug: string }
           away_score: pred.away_score,
           winner_pick: pred.winner_pick,
         } : null,
-        result: {
+        result: res ? {
           actual_home: res.actual_home,
           actual_away: res.actual_away,
           winner: res.winner,
-        },
+        } : null,
         points: pointsMap[g.game_id] ?? null,
       };
     }),
