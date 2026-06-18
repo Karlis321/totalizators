@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast from '@/components/Toast';
 import { formatDateShortLv, todayEET } from '@/lib/utils';
 
@@ -28,9 +27,9 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   const [status, setStatus] = useState<StatusData | null>(null);
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
-  const [dialog, setDialog] = useState<{ title: string; body?: string; warning?: string; onConfirm: () => void } | null>(null);
   const [resultInputs, setResultInputs] = useState<Record<string, { home: string; away: string; winner: string }>>({});
   const [expandedResults, setExpandedResults] = useState(false);
+  const [fetchingResults, setFetchingResults] = useState(false);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -81,25 +80,19 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
   // ── Lock ────────────────────────────────────────────────────────────────
   async function handleLock(date: string) {
-    setDialog({
-      title: `Aizvērt ${formatDateShortLv(date)}?`,
-      onConfirm: async () => {
-        setDialog(null);
-        setStatus(prev => prev ? { ...prev, open_days: prev.open_days.filter(d => d !== date) } : prev);
-        const res = await fetch('/api/admin/lock', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ date }),
-        });
-        if (res.ok) {
-          setToast({ message: `✓ ${formatDateShortLv(date)} aizvērts.`, variant: 'success' });
-          setTimeout(fetchStatus, 1500);
-        } else {
-          setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
-          fetchStatus();
-        }
-      },
+    setStatus(prev => prev ? { ...prev, open_days: prev.open_days.filter(d => d !== date) } : prev);
+    const res = await fetch('/api/admin/lock', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ date }),
     });
+    if (res.ok) {
+      setToast({ message: `✓ ${formatDateShortLv(date)} aizvērts.`, variant: 'success' });
+      setTimeout(fetchStatus, 1500);
+    } else {
+      setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
+      fetchStatus();
+    }
   }
 
   // ── Save result ─────────────────────────────────────────────────────────
@@ -108,36 +101,49 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
     const homeVal = parseInt(inp.home, 10);
     const awayVal = parseInt(inp.away, 10);
     const penaltyWinner = game.stage === 'knockout' && homeVal === awayVal ? inp.winner : null;
-    const body = {
-      game_id: game.game_id,
-      actual_home: homeVal,
-      actual_away: awayVal,
-      winner: penaltyWinner || null,
-    };
-
-    const confirmText = game.stage === 'group'
-      ? `Saglabāt: ${game.home_team} ${inp.home} - ${inp.away} ${game.away_team}?`
-      : `Saglabāt: ${inp.winner} uzvarēja?`;
-
-    setDialog({
-      title: confirmText,
-      onConfirm: async () => {
-        setDialog(null);
-        const res = await fetch('/api/admin/result', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify(body),
-        });
-        if (res.ok) {
-          setToast({ message: '✓ Rezultāts saglabāts!', variant: 'success' });
-          setResultInputs(prev => { const n = { ...prev }; delete n[game.game_id]; return n; });
-          setTimeout(fetchSchedule, 500);
-        } else {
-          const d = await res.json();
-          setToast({ message: d.error ?? 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
-        }
-      },
+    const res = await fetch('/api/admin/result', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        game_id: game.game_id,
+        actual_home: homeVal,
+        actual_away: awayVal,
+        winner: penaltyWinner || null,
+      }),
     });
+    if (res.ok) {
+      setToast({ message: '✓ Rezultāts saglabāts!', variant: 'success' });
+      setResultInputs(prev => { const n = { ...prev }; delete n[game.game_id]; return n; });
+      setTimeout(fetchSchedule, 500);
+    } else {
+      const d = await res.json();
+      setToast({ message: d.error ?? 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
+    }
+  }
+
+  // ── Manual fetch results ─────────────────────────────────────────────────
+  async function handleFetchResults(date?: string) {
+    setFetchingResults(true);
+    const url = date
+      ? `/api/cron/fetch-results?date=${date}`
+      : '/api/cron/fetch-results';
+    try {
+      const res = await fetch(url, { headers: authHeaders(), cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok) {
+        const msg = data.saved > 0
+          ? `✓ ${data.saved} rezultāt${data.saved === 1 ? 's' : 'i'} importēti (${data.date})`
+          : `Nav jaunu rezultātu (${data.date})`;
+        setToast({ message: msg, variant: 'success' });
+        if (data.saved > 0) { setTimeout(fetchSchedule, 500); }
+      } else {
+        setToast({ message: data.error ?? 'API kļūda', variant: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Savienojuma kļūda', variant: 'error' });
+    } finally {
+      setFetchingResults(false);
+    }
   }
 
   const allDates = schedule
@@ -261,7 +267,17 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
       {/* ── Section 3: Result entry ──────────────────────────────────── */}
       <section className="px-4 pt-4 pb-3">
-        <h2 className="text-xl font-bold text-grey-900 mb-3">Rezultātu Ievade</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xl font-bold text-grey-900">Rezultātu Ievade</h2>
+          <button
+            type="button"
+            onClick={() => handleFetchResults()}
+            disabled={fetchingResults}
+            className="text-xs font-medium text-brand-green border border-brand-green rounded-lg px-3 py-1.5 disabled:opacity-50"
+          >
+            {fetchingResults ? '...' : '↓ Importēt'}
+          </button>
+        </div>
 
         {pendingGames.length === 0 && completedGames.length > 0 && (
           <p className="text-sm text-green-700 font-medium py-6 text-center">✓ Visi rezultāti ievadīti.</p>
@@ -379,15 +395,6 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
         )}
       </section>
 
-      {dialog && (
-        <ConfirmDialog
-          title={dialog.title}
-          body={dialog.body}
-          warning={dialog.warning}
-          onConfirm={dialog.onConfirm}
-          onCancel={() => setDialog(null)}
-        />
-      )}
       {toast && <Toast message={toast.message} variant={toast.variant} onDismiss={dismissToast} />}
     </div>
   );

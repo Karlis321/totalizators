@@ -54,11 +54,13 @@ function teamsMatch(apiName: string, sheetName: string): boolean {
 // ── Route ─────────────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
-  // Vercel sends Authorization: Bearer <CRON_SECRET> for scheduled cron calls.
-  // We also allow the admin to trigger it manually via ?date=YYYY-MM-DD
-  // protected by the same secret in the Authorization header.
+  // Accept either the Vercel cron secret OR the admin token (for manual trigger from the UI).
   const authHeader = request.headers.get('authorization');
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const validTokens = [
+    process.env.CRON_SECRET ? `Bearer ${process.env.CRON_SECRET}` : null,
+    process.env.ADMIN_TOKEN  ? `Bearer ${process.env.ADMIN_TOKEN}`  : null,
+  ].filter(Boolean);
+  if (!authHeader || !validTokens.includes(authHeader)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
