@@ -1,20 +1,19 @@
 import AppHeader from '@/components/AppHeader';
 import BottomNav from '@/components/BottomNav';
 import { formatTimestampLv } from '@/lib/utils';
-import { getMembers, getAllPoints } from '@/lib/sheets';
+import { getMembers, getAllPoints, getResults } from '@/lib/sheets';
 
 export const revalidate = 30;
 
 async function getLeaderboard() {
-  const [members, allPoints] = await Promise.all([getMembers(), getAllPoints()]);
+  const [members, allPoints, results] = await Promise.all([getMembers(), getAllPoints(), getResults()]);
 
   const totals: Record<string, number> = {};
-  let last_updated = '';
   for (const row of allPoints) {
-  totals[row.member_id] = (totals[row.member_id] ?? 0) + row.points;
-  const calculatedAt = (row as any).calculated_at;
-  if (!last_updated || calculatedAt > last_updated) last_updated = calculatedAt;
-}
+    totals[row.member_id] = (totals[row.member_id] ?? 0) + row.points;
+  }
+
+  const last_updated = results.reduce((latest, r) => r.entered_at > latest ? r.entered_at : latest, '');
 
   const sorted = members
     .map(m => ({ member_id: m.id, display_name: m.display_name, total_points: totals[m.id] ?? 0 }))
