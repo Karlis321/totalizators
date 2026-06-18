@@ -8,6 +8,7 @@ import {
   getMember, getOpenDate, getGamesForDate,
   getGames, getResults, getAllPredictionsForMember, getPointsForMember,
 } from '@/lib/sheets';
+import AutoRefresh from '@/components/AutoRefresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,6 +97,8 @@ export default async function PredictPage({ params }: { params: { slug: string }
         <h1 className="text-2xl font-bold text-grey-900">Sveiks, {member.display_name}! 👋</h1>
         <p className="text-sm text-grey-600 mt-1">FIFA World Cup 2026 Totalizators</p>
       </div>
+
+      <AutoRefresh intervalMs={15000} />
 
       {openDate ? (
         <>

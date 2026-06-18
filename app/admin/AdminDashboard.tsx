@@ -64,34 +64,19 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
   // ── Unlock ──────────────────────────────────────────────────────────────
   async function handleUnlock(date: string) {
-    const submittedForDate = status?.open_day === date ? status.submitted_count : 0;
-    const isPast = date < todayEET();
-    setDialog({
-      title: `Atbloķēt spēles ${formatDateShortLv(date)}?`,
-      warning: isPast
-        ? `⚠️ Šī ir pagājusi diena.${submittedForDate > 0 ? ` Šai dienai jau ir ${submittedForDate} iesniegumi.` : ''}`
-        : submittedForDate > 0
-        ? `⚠️ Šai dienai jau ir ${submittedForDate} iesniegumi.`
-        : undefined,
-      onConfirm: async () => {
-        setDialog(null);
-        // Optimistic update — show immediately
-        setStatus(prev => prev ? { ...prev, open_day: date, submitted_count: 0, all_submitted: false, members: prev.members.map(m => ({ ...m, submitted: false })) } : prev);
-        const res = await fetch('/api/admin/unlock', {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ date }),
-        });
-        if (res.ok) {
-          setToast({ message: `✓ Atbloķēts: ${formatDateShortLv(date)}`, variant: 'success' });
-          // Refetch to confirm server state
-          setTimeout(fetchStatus, 500);
-        } else {
-          setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
-          fetchStatus(); // revert optimistic
-        }
-      },
+    setStatus(prev => prev ? { ...prev, open_day: date, submitted_count: 0, all_submitted: false, members: prev.members.map(m => ({ ...m, submitted: false })) } : prev);
+    const res = await fetch('/api/admin/unlock', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ date }),
     });
+    if (res.ok) {
+      setToast({ message: `✓ Atbloķēts: ${formatDateShortLv(date)}`, variant: 'success' });
+      setTimeout(fetchStatus, 500);
+    } else {
+      setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
+      fetchStatus();
+    }
   }
 
   // ── Lock ────────────────────────────────────────────────────────────────
