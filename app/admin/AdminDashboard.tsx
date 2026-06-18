@@ -281,7 +281,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
           return (
             <div key={game.game_id} className="bg-white border border-grey-200 rounded-xl p-4 mb-3 shadow-sm">
               <p className="text-sm font-semibold text-grey-900">{game.home_team} vs {game.away_team}</p>
-              <p className="text-xs text-grey-500 mt-0.5">{game.time_eet} EET · {game.round === 'group' ? `Grupa ${game.group}` : game.round}</p>
+              <p className="text-xs text-grey-500 mt-0.5">{formatDateShortLv(game.date)} · {game.time_eet} EET · {game.round === 'group' ? `Grupa ${game.group}` : game.round}</p>
 
               {/* Both group and knockout use score inputs */}
               <div className="flex items-center justify-center gap-4 mt-4">
@@ -352,9 +352,8 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
                     <span className="text-sm text-grey-900">
                       {game.home_team} vs {game.away_team}
                       {' — '}
-                      {game.stage === 'group'
-                        ? `${game.result?.actual_home} - ${game.result?.actual_away}`
-                        : `${game.result?.winner} ✓`}
+                      {`${game.result?.actual_home} - ${game.result?.actual_away}`}
+                      {game.result?.winner ? ` (${game.result.winner})` : ''}
                     </span>
                     <button
                       type="button"
