@@ -1,16 +1,31 @@
 import AppHeader from '@/components/AppHeader';
 import BottomNav from '@/components/BottomNav';
 import { formatTimestampLv } from '@/lib/utils';
+import { getMembers, getAllPoints } from '@/lib/sheets';
 
 export const revalidate = 30;
 
 async function getLeaderboard() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/leaderboard`, { next: { revalidate: 30 } });
-  if (!res.ok) throw new Error('leaderboard fetch failed');
-  return res.json() as Promise<{
-    last_updated: string;
-    entries: { rank: number; member_id: string; display_name: string; total_points: number }[];
-  }>;
+  const [members, allPoints] = await Promise.all([getMembers(), getAllPoints()]);
+
+  const totals: Record<string, number> = {};
+  let last_updated = '';
+  for (const row of allPoints) {
+    totals[row.member_id] = (totals[row.member_id] ?? 0) + row.points;
+    if (!last_updated || row.calculated_at > last_updated) last_updated = row.calculated_at;
+  }
+
+  const sorted = members
+    .map(m => ({ member_id: m.id, display_name: m.display_name, total_points: totals[m.id] ?? 0 }))
+    .sort((a, b) => b.total_points - a.total_points);
+
+  let rank = 1;
+  const entries = sorted.map((e, i) => {
+    if (i > 0 && e.total_points < sorted[i - 1].total_points) rank = i + 1;
+    return { ...e, rank };
+  });
+
+  return { last_updated, entries };
 }
 
 export default async function LeaderboardPage() {

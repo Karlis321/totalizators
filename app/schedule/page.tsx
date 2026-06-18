@@ -2,6 +2,7 @@ import AppHeader from '@/components/AppHeader';
 import BottomNav from '@/components/BottomNav';
 import RoundBadge from '@/components/RoundBadge';
 import { formatDateLv } from '@/lib/utils';
+import { getGames, getResults } from '@/lib/sheets';
 
 export const revalidate = 300;
 
@@ -13,9 +14,25 @@ type GameRow = {
 type DateGroup = { date: string; games: GameRow[] };
 
 async function getSchedule() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/schedule`, { next: { revalidate: 300 } });
-  if (!res.ok) throw new Error('schedule fetch failed');
-  return res.json() as Promise<{ schedule: DateGroup[] }>;
+  const [games, results] = await Promise.all([getGames(), getResults()]);
+  const resultMap: Record<string, GameResult> = {};
+  for (const r of results) {
+    resultMap[r.game_id] = { actual_home: r.actual_home, actual_away: r.actual_away, winner: r.winner };
+  }
+
+  const byDate: Record<string, GameRow[]> = {};
+  for (const g of games) {
+    if (!byDate[g.date]) byDate[g.date] = [];
+    byDate[g.date].push({
+      game_id: g.game_id, time_eet: g.time_eet,
+      home_team: g.home_team, away_team: g.away_team,
+      group: g.group, round: g.round, stage: g.stage,
+      result: resultMap[g.game_id] ?? null,
+    });
+  }
+
+  const schedule: DateGroup[] = Object.keys(byDate).sort().map(date => ({ date, games: byDate[date] }));
+  return { schedule };
 }
 
 function ScoreDisplay({ game }: { game: GameRow }) {
@@ -39,7 +56,7 @@ export default async function SchedulePage() {
       <h1 className="text-2xl font-bold text-grey-900 mt-6 mb-4 px-4">Spēļu Saraksts</h1>
 
       {schedule.map(({ date, games }) => {
-        const rounds = [...new Set(games.map(g => g.round))];
+        const rounds = Array.from(new Set(games.map(g => g.round)));
         return (
           <div key={date} className="mb-6">
             {/* Sticky date header */}
