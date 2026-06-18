@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { DateSection } from './page';
-import type { DateGroup } from './page';
+import { DateSection } from './DateSection';
+import type { DateGroup } from './types';
 
 export default function ScheduleClient({
   completed,
@@ -14,7 +14,6 @@ export default function ScheduleClient({
 
   return (
     <div className="mt-2">
-      {/* Toggle button */}
       <button
         onClick={() => setOpen(p => !p)}
         className="w-full flex items-center justify-between px-4 py-3 border-t border-grey-200 text-sm text-grey-600"
@@ -24,7 +23,6 @@ export default function ScheduleClient({
         </span>
         <span className="text-xs text-grey-400">{open ? 'Slēpt' : 'Rādīt'}</span>
       </button>
-
       {open && completed.map(dg => <DateSection key={dg.date} {...dg} />)}
     </div>
   );
