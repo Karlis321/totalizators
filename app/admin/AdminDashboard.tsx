@@ -126,7 +126,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
   // ── All game dates ───────────────────────────────────────────────────────
   const allDates = schedule
-    ? [...new Set(schedule.schedule.map(d => d.date))].sort()
+    ? Array.from(new Set(schedule.schedule.map(d => d.date))).sort()
     : [];
 
   // ── Pending result games ─────────────────────────────────────────────────
