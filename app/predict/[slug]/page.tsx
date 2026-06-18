@@ -5,7 +5,7 @@ import PredictForm from './PredictForm';
 import HistorySection from './HistorySection';
 import { formatDateLv } from '@/lib/utils';
 import {
-  getMember, getOpenDate, getGamesForDate, getPredictions,
+  getMember, getOpenDate, getGamesForDate,
   getGames, getResults, getAllPredictionsForMember, getPointsForMember,
 } from '@/lib/sheets';
 

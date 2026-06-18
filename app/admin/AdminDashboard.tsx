@@ -47,7 +47,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
     });
     if (res.status === 401) { onLogout(); return; }
     if (res.ok) setStatus(await res.json());
-  }, [token, onLogout, authHeaders]);
+  }, [onLogout, authHeaders]);
 
   const fetchSchedule = useCallback(async () => {
     const res = await fetch(`/api/schedule?t=${Date.now()}`, { cache: 'no-store' });
