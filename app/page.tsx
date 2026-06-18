@@ -1,5 +1,6 @@
 import AppHeader from '@/components/AppHeader';
 import BottomNav from '@/components/BottomNav';
+import MemberPicker from '@/components/MemberPicker';
 import { formatTimestampLv } from '@/lib/utils';
 import { getMembers, getAllPoints, getResults } from '@/lib/sheets';
 
@@ -29,12 +30,14 @@ async function getLeaderboard() {
 }
 
 export default async function LeaderboardPage() {
-  const data = await getLeaderboard();
+  const [data, members] = await Promise.all([getLeaderboard(), getMembers()]);
   const { last_updated, entries } = data;
   const anyPoints = entries.some(e => e.total_points > 0);
+  const pickerMembers = members.map(m => ({ member_id: m.id, display_name: m.display_name }));
 
   return (
     <div className="max-w-lg mx-auto pb-[78px]">
+      <MemberPicker members={pickerMembers} />
       <AppHeader />
 
       <h1 className="text-2xl font-bold text-grey-900 mt-6 mb-1 px-4">Tabula</h1>
