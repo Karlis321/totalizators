@@ -72,7 +72,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
     });
     if (res.ok) {
       setToast({ message: `✓ Atbloķēts: ${formatDateShortLv(date)}`, variant: 'success' });
-      setTimeout(fetchStatus, 500);
+      setTimeout(fetchStatus, 1500);
     } else {
       setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
       fetchStatus();
@@ -87,7 +87,6 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       warning: count > 0 ? `⚠️ Šai dienai jau ir ${count} iesniegumi.` : undefined,
       onConfirm: async () => {
         setDialog(null);
-        // Optimistic update
         setStatus(prev => prev ? { ...prev, open_day: null } : prev);
         const res = await fetch('/api/admin/lock', {
           method: 'POST',
@@ -96,7 +95,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
         });
         if (res.ok) {
           setToast({ message: '✓ Diena aizvērta.', variant: 'success' });
-          setTimeout(fetchStatus, 500);
+          setTimeout(fetchStatus, 1500);
         } else {
           setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
           fetchStatus();

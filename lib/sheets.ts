@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { unstable_cache } from 'next/cache';
+import { unstable_cache, revalidateTag } from 'next/cache';
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ export const getOpenDate = unstable_cache(
     return config['open_date'] || null;
   },
   ['open_date'],
-  { revalidate: 10 }
+  { revalidate: 10, tags: ['open_date'] }
 );
 
 export const getScoringConfig = unstable_cache(
@@ -185,6 +185,7 @@ export async function setOpenDate(date: string): Promise<void> {
   if (rowIndex !== -1) {
     await updateRange(`Config!B${rowIndex + 2}`, [[date]]);
   }
+  revalidateTag('open_date');
 }
 
 export async function clearOpenDate(): Promise<void> {
