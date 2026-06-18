@@ -18,7 +18,9 @@ export function formatDateShortLv(isoDate: string): string {
 
 // Format ISO UTC timestamp → Latvian "18. jūnijs, 23:14"
 export function formatTimestampLv(iso: string): string {
+  if (!iso) return '—';
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
   const day = new Intl.DateTimeFormat('lv-LV', { day: 'numeric', month: 'long', timeZone: 'Europe/Riga' }).format(d);
   const time = new Intl.DateTimeFormat('lv-LV', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Riga', hour12: false }).format(d);
   return `${day}, ${time}`;
