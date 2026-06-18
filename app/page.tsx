@@ -11,9 +11,10 @@ async function getLeaderboard() {
   const totals: Record<string, number> = {};
   let last_updated = '';
   for (const row of allPoints) {
-    totals[row.member_id] = (totals[row.member_id] ?? 0) + row.points;
-    if (!last_updated || row.calculated_at > last_updated) last_updated = row.calculated_at;
-  }
+  totals[row.member_id] = (totals[row.member_id] ?? 0) + row.points;
+  const calculatedAt = (row as any).calculated_at;
+  if (!last_updated || calculatedAt > last_updated) last_updated = calculatedAt;
+}
 
   const sorted = members
     .map(m => ({ member_id: m.id, display_name: m.display_name, total_points: totals[m.id] ?? 0 }))
