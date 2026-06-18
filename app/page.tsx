@@ -2,7 +2,7 @@ import AppHeader from '@/components/AppHeader';
 import BottomNav from '@/components/BottomNav';
 import MemberPicker from '@/components/MemberPicker';
 import { formatTimestampLv } from '@/lib/utils';
-import { getAllPoints, getResults } from '@/lib/sheets';
+import { getMembers, getAllPoints, getResults } from '@/lib/sheets';
 
 export const revalidate = 30;
 
@@ -45,14 +45,12 @@ export default async function LeaderboardPage() {
       </p>
 
       <div className="px-4">
-        {/* Table header */}
         <div className="flex items-center py-2 border-b border-grey-300 text-xs font-semibold text-grey-600 uppercase tracking-wide">
           <span className="w-12 text-center">Vieta</span>
           <span className="flex-1">Dalībnieks</span>
           <span className="w-16 text-center">Punkti</span>
         </div>
 
-        {/* Rows */}
         {entries.map(e => {
           const isLeader = e.rank === 1 && anyPoints;
           return (
