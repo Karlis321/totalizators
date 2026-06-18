@@ -1,60 +1,83 @@
 import type { ScoringConfig } from './sheets';
 
-type GroupPrediction = { home_score: number; away_score: number };
-type GroupResult     = { actual_home: number; actual_away: number };
-type KnockoutPrediction = { winner_pick: string };
-type KnockoutResult     = { winner: string };
+type ScorePrediction = { home_score: number; away_score: number };
+type ScoreResult     = { actual_home: number; actual_away: number; winner?: string | null };
+type GameInfo        = { home_team: string; away_team: string };
 
 export function calculateGroupPoints(
-  prediction: GroupPrediction,
-  result: GroupResult,
+  prediction: ScorePrediction,
+  result: ScoreResult,
   config: ScoringConfig
 ): number {
-  const predWinner = Math.sign(prediction.home_score - prediction.away_score);
-  const actlWinner = Math.sign(result.actual_home - result.actual_away);
-  const predDiff   = prediction.home_score - prediction.away_score;
-  const actlDiff   = result.actual_home - result.actual_away;
+  const { home_score, away_score } = prediction;
+  const { actual_home, actual_away } = result;
 
-  if (prediction.home_score === result.actual_home &&
-      prediction.away_score === result.actual_away) {
-    return config.pts_exact;
+  if (home_score === actual_home && away_score === actual_away) {
+    return config.pts_exact; // 4
   }
-  if (predWinner !== actlWinner) {
-    return config.pts_wrong;
+
+  let pts = 0;
+
+  // Correct outcome (home win / draw / away win)
+  const predOutcome = Math.sign(home_score - away_score);
+  const actlOutcome = Math.sign(actual_home - actual_away);
+  if (predOutcome === actlOutcome) pts += config.pts_correct_winner; // 1
+
+  // At least one team's score exactly right
+  if (home_score === actual_home || away_score === actual_away) {
+    pts += config.pts_one_team; // 1
   }
-  if (predDiff === actlDiff) {
-    return config.pts_correct_diff;
-  }
-  return config.pts_correct_winner;
+
+  return pts;
 }
 
 export function calculateKnockoutPoints(
-  prediction: KnockoutPrediction,
-  result: KnockoutResult,
+  prediction: ScorePrediction,
+  result: ScoreResult,
+  game: GameInfo,
   config: ScoringConfig
 ): number {
-  return prediction.winner_pick === result.winner
-    ? config.pts_knockout_correct
-    : config.pts_knockout_wrong;
+  const { home_score, away_score } = prediction;
+  const { actual_home, actual_away, winner } = result;
+
+  if (home_score === actual_home && away_score === actual_away) {
+    return config.pts_knockout_exact; // 3
+  }
+
+  let pts = 0;
+
+  // Actual winner: from score if decisive, else from winner field (penalty tiebreak)
+  const actualWinner = actual_home > actual_away ? game.home_team
+    : actual_away > actual_home ? game.away_team
+    : (winner ?? null);
+
+  // Predicted winner: from predicted score (null if predicted draw — can't determine penalty winner)
+  const predWinner = home_score > away_score ? game.home_team
+    : away_score > home_score ? game.away_team
+    : null;
+
+  if (predWinner !== null && predWinner === actualWinner) {
+    pts += config.pts_knockout_winner; // 1
+  }
+
+  // At least one team's score exactly right
+  if (home_score === actual_home || away_score === actual_away) {
+    pts += config.pts_knockout_one_team; // 1
+  }
+
+  return pts;
 }
 
 export function calculatePoints(
   stage: 'group' | 'knockout',
-  prediction: GroupPrediction | KnockoutPrediction | null,
-  result: GroupResult | KnockoutResult,
+  prediction: ScorePrediction | null,
+  result: ScoreResult,
+  game: GameInfo,
   config: ScoringConfig
 ): number {
   if (!prediction) return 0;
   if (stage === 'group') {
-    return calculateGroupPoints(
-      prediction as GroupPrediction,
-      result as GroupResult,
-      config
-    );
+    return calculateGroupPoints(prediction, result, config);
   }
-  return calculateKnockoutPoints(
-    prediction as KnockoutPrediction,
-    result as KnockoutResult,
-    config
-  );
+  return calculateKnockoutPoints(prediction, result, game, config);
 }

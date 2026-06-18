@@ -23,17 +23,17 @@ export async function POST(request: Request) {
     const game = games.find(g => g.game_id === game_id);
     if (!game) return Response.json({ error: 'Spēle nav atrasta.' }, { status: 404 });
 
-    // Validate result values
-    if (game.stage === 'group') {
-      if (actual_home == null || actual_away == null ||
-          !Number.isInteger(actual_home) || !Number.isInteger(actual_away) ||
-          actual_home < 0 || actual_home > 20 ||
-          actual_away < 0 || actual_away > 20) {
-        return Response.json({ error: 'Nederīgas vērtības.' }, { status: 422 });
-      }
-    } else {
+    // Validate result values — both group and knockout now use home/away scores
+    if (actual_home == null || actual_away == null ||
+        !Number.isInteger(actual_home) || !Number.isInteger(actual_away) ||
+        actual_home < 0 || actual_home > 20 ||
+        actual_away < 0 || actual_away > 20) {
+      return Response.json({ error: 'Nederīgas vērtības.' }, { status: 422 });
+    }
+    // For knockout: if scores are tied, a penalty winner must be specified
+    if (game.stage === 'knockout' && actual_home === actual_away) {
       if (!winner || (winner !== game.home_team && winner !== game.away_team)) {
-        return Response.json({ error: 'Nederīgs uzvarētājs.' }, { status: 422 });
+        return Response.json({ error: 'Soda sitienu uzvarētājs nav norādīts.' }, { status: 422 });
       }
     }
 
@@ -48,20 +48,23 @@ export async function POST(request: Request) {
       members.map(m => getPredictions(m.id, [game_id]))
     );
 
-    const result = { actual_home, actual_away, winner };
     const points_calculated: { member_id: string; points: number }[] = [];
 
     for (let i = 0; i < members.length; i++) {
       const m = members[i];
       const pred = allRows[i][0] ?? null;
 
-      const prediction = pred ? (
-        game.stage === 'group'
-          ? { home_score: pred.home_score!, away_score: pred.away_score! }
-          : { winner_pick: pred.winner_pick! }
-      ) : null;
+      const prediction = pred && pred.home_score != null && pred.away_score != null
+        ? { home_score: pred.home_score, away_score: pred.away_score }
+        : null;
 
-      const pts = calculatePoints(game.stage as 'group' | 'knockout', prediction, result as { actual_home: number; actual_away: number } | { winner: string }, config);
+      const pts = calculatePoints(
+        game.stage as 'group' | 'knockout',
+        prediction,
+        { actual_home: actual_home!, actual_away: actual_away!, winner },
+        { home_team: game.home_team, away_team: game.away_team },
+        config
+      );
       await upsertPoints(m.id, game_id, pts);
       points_calculated.push({ member_id: m.id, points: pts });
     }

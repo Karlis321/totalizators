@@ -45,21 +45,14 @@ export async function POST(request: Request) {
 
     // Validate each prediction value
     for (const pred of validPredictions) {
-      const game = openGameMap[pred.game_id];
-      if (game.stage === 'group') {
-        if (
-          pred.home_score == null || pred.away_score == null ||
-          !Number.isInteger(pred.home_score) || !Number.isInteger(pred.away_score) ||
-          pred.home_score < 0 || pred.home_score > 20 ||
-          pred.away_score < 0 || pred.away_score > 20
-        ) {
-          return Response.json({ error: 'Nederīgas vērtības.' }, { status: 422 });
-        }
-      } else {
-        if (!pred.winner_pick ||
-            (pred.winner_pick !== game.home_team && pred.winner_pick !== game.away_team)) {
-          return Response.json({ error: 'Nederīga uzvarētāja izvēle.' }, { status: 422 });
-        }
+      // Both group and knockout now require home_score + away_score
+      if (
+        pred.home_score == null || pred.away_score == null ||
+        !Number.isInteger(pred.home_score) || !Number.isInteger(pred.away_score) ||
+        pred.home_score < 0 || pred.home_score > 20 ||
+        pred.away_score < 0 || pred.away_score > 20
+      ) {
+        return Response.json({ error: 'Nederīgas vērtības.' }, { status: 422 });
       }
     }
 

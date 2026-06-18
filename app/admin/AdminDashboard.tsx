@@ -65,9 +65,12 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   // ── Unlock ──────────────────────────────────────────────────────────────
   async function handleUnlock(date: string) {
     const submittedForDate = status?.open_day === date ? status.submitted_count : 0;
+    const isPast = date < todayEET();
     setDialog({
       title: `Atbloķēt spēles ${formatDateShortLv(date)}?`,
-      warning: submittedForDate > 0
+      warning: isPast
+        ? `⚠️ Šī ir pagājusi diena.${submittedForDate > 0 ? ` Šai dienai jau ir ${submittedForDate} iesniegumi.` : ''}`
+        : submittedForDate > 0
         ? `⚠️ Šai dienai jau ir ${submittedForDate} iesniegumi.`
         : undefined,
       onConfirm: async () => {
@@ -120,9 +123,15 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   // ── Save result ─────────────────────────────────────────────────────────
   async function handleSaveResult(game: Game) {
     const inp = resultInputs[game.game_id] ?? { home: '', away: '', winner: '' };
-    const body = game.stage === 'group'
-      ? { game_id: game.game_id, actual_home: parseInt(inp.home, 10), actual_away: parseInt(inp.away, 10), winner: null }
-      : { game_id: game.game_id, actual_home: null, actual_away: null, winner: inp.winner };
+    const homeVal = parseInt(inp.home, 10);
+    const awayVal = parseInt(inp.away, 10);
+    const penaltyWinner = game.stage === 'knockout' && homeVal === awayVal ? inp.winner : null;
+    const body = {
+      game_id: game.game_id,
+      actual_home: homeVal,
+      actual_away: awayVal,
+      winner: penaltyWinner || null,
+    };
 
     const confirmText = game.stage === 'group'
       ? `Saglabāt: ${game.home_team} ${inp.home} - ${inp.away} ${game.away_team}?`
@@ -209,6 +218,9 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       <section className="px-4 pt-6 pb-3">
         <h2 className="text-xl font-bold text-grey-900 mb-3">Dienas Kontrole</h2>
         <div className="space-y-1">
+          {allDates.length === 0 && (
+            <p className="text-sm text-grey-400 py-4 text-center">Nav spēļu. Pārbaudi, vai spēļu tabula ir aizpildīta.</p>
+          )}
           {allDates.map(date => {
             const st = dateStatus(date, status?.open_day ?? null);
             return (
@@ -221,12 +233,16 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
                   {st === 'locked' && <span className="text-xs px-2 py-0.5 rounded-full bg-grey-100 text-grey-500">Slēgts</span>}
                   {st === 'past' && <span className="text-xs px-2 py-0.5 rounded-full bg-grey-50 text-grey-400">Pagājis</span>}
                   {st === 'open' && (
-                    <button onClick={handleLock} className="text-sm font-medium text-red-600 border border-red-300 rounded-lg px-3 py-1.5 active:bg-red-50">
+                    <button type="button" onClick={handleLock} className="text-sm font-medium text-red-600 border border-red-300 rounded-lg px-3 py-1.5 active:bg-red-50">
                       Aizvērt
                     </button>
                   )}
-                  {st === 'locked' && (
-                    <button onClick={() => handleUnlock(date)} className="text-sm font-medium text-brand-green border border-brand-green rounded-lg px-3 py-1.5 active:bg-green-50">
+                  {(st === 'locked' || st === 'past') && (
+                    <button type="button" onClick={() => handleUnlock(date)} className={`text-sm font-medium border rounded-lg px-3 py-1.5 ${
+                      st === 'past'
+                        ? 'text-grey-500 border-grey-300 active:bg-grey-50'
+                        : 'text-brand-green border-brand-green active:bg-green-50'
+                    }`}>
                       Atbloķēt
                     </button>
                   )}
@@ -272,50 +288,61 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
         {pendingGames.map(game => {
           const inp = resultInputs[game.game_id] ?? { home: '', away: '', winner: '' };
-          const canSave = game.stage === 'group'
-            ? inp.home !== '' && inp.away !== '' && !isNaN(parseInt(inp.home, 10)) && !isNaN(parseInt(inp.away, 10))
-            : inp.winner !== '';
+          const homeVal = parseInt(inp.home, 10);
+          const awayVal = parseInt(inp.away, 10);
+          const scoresValid = inp.home !== '' && inp.away !== '' && !isNaN(homeVal) && !isNaN(awayVal);
+          const isTied = scoresValid && homeVal === awayVal;
+          const needsPenaltyWinner = game.stage === 'knockout' && isTied;
+          const canSave = scoresValid && (!needsPenaltyWinner || inp.winner !== '');
 
           return (
             <div key={game.game_id} className="bg-white border border-grey-200 rounded-xl p-4 mb-3 shadow-sm">
               <p className="text-sm font-semibold text-grey-900">{game.home_team} vs {game.away_team}</p>
               <p className="text-xs text-grey-500 mt-0.5">{game.time_eet} EET · {game.round === 'group' ? `Grupa ${game.group}` : game.round}</p>
 
-              {game.stage === 'group' ? (
-                <div className="flex items-center justify-center gap-4 mt-4">
-                  <input
-                    type="number" inputMode="numeric" min={0} max={20}
-                    value={inp.home}
-                    onChange={e => setResultInputs(p => ({ ...p, [game.game_id]: { ...inp, home: e.target.value } }))}
-                    className="w-14 h-12 text-2xl font-bold text-center border-2 border-grey-300 rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  <span className="text-xl text-grey-400 font-bold">-</span>
-                  <input
-                    type="number" inputMode="numeric" min={0} max={20}
-                    value={inp.away}
-                    onChange={e => setResultInputs(p => ({ ...p, [game.game_id]: { ...inp, away: e.target.value } }))}
-                    className="w-14 h-12 text-2xl font-bold text-center border-2 border-grey-300 rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 mt-4">
-                  {[game.home_team, game.away_team].map(team => (
-                    <button
-                      key={team}
-                      onClick={() => setResultInputs(p => ({ ...p, [game.game_id]: { ...inp, winner: team } }))}
-                      className={`flex-1 h-12 rounded-lg border-2 text-sm font-semibold transition-colors ${
-                        inp.winner === team
-                          ? 'border-brand-green bg-brand-green-light text-brand-green'
-                          : 'border-grey-300 bg-white text-grey-900'
-                      }`}
-                    >
-                      {team}
-                    </button>
-                  ))}
+              {/* Both group and knockout use score inputs */}
+              <div className="flex items-center justify-center gap-4 mt-4">
+                <input
+                  type="number" inputMode="numeric" min={0} max={20}
+                  aria-label={`${game.home_team} goli`}
+                  value={inp.home}
+                  onChange={e => setResultInputs(p => ({ ...p, [game.game_id]: { ...inp, home: e.target.value } }))}
+                  className="w-14 h-12 text-2xl font-bold text-center border-2 border-grey-300 rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-xl text-grey-400 font-bold">-</span>
+                <input
+                  type="number" inputMode="numeric" min={0} max={20}
+                  aria-label={`${game.away_team} goli`}
+                  value={inp.away}
+                  onChange={e => setResultInputs(p => ({ ...p, [game.game_id]: { ...inp, away: e.target.value } }))}
+                  className="w-14 h-12 text-2xl font-bold text-center border-2 border-grey-300 rounded-lg [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              {/* Penalty winner selector — only shown for knockout when scores are tied */}
+              {needsPenaltyWinner && (
+                <div className="mt-3">
+                  <p className="text-xs text-grey-500 mb-2 text-center">Soda sitienu uzvarētājs</p>
+                  <div className="flex gap-2">
+                    {[game.home_team, game.away_team].map(team => (
+                      <button
+                        type="button"
+                        key={team}
+                        onClick={() => setResultInputs(p => ({ ...p, [game.game_id]: { ...inp, winner: team } }))}
+                        className={`flex-1 h-10 rounded-lg border-2 text-sm font-semibold transition-colors ${
+                          inp.winner === team
+                            ? 'border-brand-green bg-brand-green-light text-brand-green'
+                            : 'border-grey-300 bg-white text-grey-900'
+                        }`}
+                      >
+                        {team}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
               <button
+                type="button"
                 onClick={() => handleSaveResult(game)}
                 disabled={!canSave}
                 className="w-full h-11 mt-4 bg-brand-green text-white rounded-lg font-semibold text-sm disabled:bg-grey-200 disabled:text-grey-400"
@@ -329,6 +356,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
         {completedGames.length > 0 && (
           <div className="mt-4">
             <button
+              type="button"
               onClick={() => setExpandedResults(p => !p)}
               className="text-sm font-semibold text-grey-600 flex items-center gap-1"
             >
@@ -346,6 +374,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
                         : `${game.result?.winner} ✓`}
                     </span>
                     <button
+                      type="button"
                       onClick={() => setResultInputs(p => ({
                         ...p,
                         [game.game_id]: {

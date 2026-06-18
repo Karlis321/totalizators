@@ -90,8 +90,12 @@ export type Result = {
 export type PointsRow = { member_id: string; game_id: string; points: number };
 
 export type ScoringConfig = {
-  pts_exact: number; pts_correct_diff: number; pts_correct_winner: number; pts_wrong: number;
-  pts_knockout_correct: number; pts_knockout_wrong: number;
+  pts_exact: number;             // group: exact scoreline
+  pts_correct_winner: number;    // group: correct outcome (win/draw)
+  pts_one_team: number;          // group: one team's score right
+  pts_knockout_exact: number;    // knockout: exact scoreline
+  pts_knockout_winner: number;   // knockout: correct winner
+  pts_knockout_one_team: number; // knockout: one team's score right
 };
 
 // ─── Members ─────────────────────────────────────────────────────────────────
@@ -167,12 +171,12 @@ export const getScoringConfig = unstable_cache(
   async (): Promise<ScoringConfig> => {
     const config = await readConfig();
     return {
-      pts_exact:           parseInt(config['pts_exact'] ?? '3', 10),
-      pts_correct_diff:    parseInt(config['pts_correct_diff'] ?? '2', 10),
-      pts_correct_winner:  parseInt(config['pts_correct_winner'] ?? '1', 10),
-      pts_wrong:           parseInt(config['pts_wrong'] ?? '0', 10),
-      pts_knockout_correct: parseInt(config['pts_knockout_correct'] ?? '1', 10),
-      pts_knockout_wrong:   parseInt(config['pts_knockout_wrong'] ?? '0', 10),
+      pts_exact:             parseInt(config['pts_exact']             ?? '4', 10),
+      pts_correct_winner:    parseInt(config['pts_correct_winner']    ?? '1', 10),
+      pts_one_team:          parseInt(config['pts_one_team']          ?? '1', 10),
+      pts_knockout_exact:    parseInt(config['pts_knockout_exact']    ?? '3', 10),
+      pts_knockout_winner:   parseInt(config['pts_knockout_winner']   ?? '1', 10),
+      pts_knockout_one_team: parseInt(config['pts_knockout_one_team'] ?? '1', 10),
     };
   },
   ['scoring_config'],
