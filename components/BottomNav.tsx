@@ -25,7 +25,7 @@ export default function BottomNav() {
       : 'text-grey-600 border-t-2 border-transparent');
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-[7] bg-white border-t border-grey-300 h-[54px] flex pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-grey-300 h-[54px] flex pb-safe">
       <Link href="/" className={tabClass('leaderboard')}>
         <span>🏆</span><span>Tabula</span>
       </Link>

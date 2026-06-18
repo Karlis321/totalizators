@@ -167,7 +167,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   return (
     <div className="max-w-lg mx-auto pb-12">
       {/* Header */}
-      <header className="bg-white border-b border-grey-200 px-4 h-14 flex items-center justify-between sticky top-0 z-10">
+      <header className="bg-white border-b border-grey-200 px-4 h-14 flex items-center justify-between sticky top-0 z-40">
         <span className="text-base font-semibold text-grey-900">⚽ Totalizators — Admin</span>
         <div className="flex items-center gap-3">
           <button
