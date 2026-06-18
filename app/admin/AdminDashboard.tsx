@@ -146,7 +146,9 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
   const today = todayEET();
   const pendingGames = schedule
-    ? schedule.schedule.flatMap(d => d.games).filter(g => !g.result && g.date <= today)
+    ? schedule.schedule.flatMap(d => d.games).filter(g =>
+        g.date <= today && (!g.result || g.game_id in resultInputs)
+      )
     : [];
   const completedGames = schedule
     ? schedule.schedule.flatMap(d => d.games).filter(g => g.result)
