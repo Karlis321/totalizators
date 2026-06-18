@@ -113,14 +113,10 @@ export const getMembers = unstable_cache(
   { revalidate: 300 }
 );
 
-export const getMember = unstable_cache(
-  async (slug: string): Promise<Member | null> => {
-    const members = await getMembers();
-    return members.find(m => m.id === slug) ?? null;
-  },
-  ['member'],
-  { revalidate: 300 }
-);
+export async function getMember(slug: string): Promise<Member | null> {
+  const members = await getMembers();
+  return members.find(m => m.id === slug) ?? null;
+}
 
 // ─── Games ───────────────────────────────────────────────────────────────────
 
