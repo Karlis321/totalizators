@@ -15,20 +15,17 @@ type HistoryData = {
 };
 
 function predictionText(
-  stage: string,
   pred: HistoryData['history'][0]['games'][0]['prediction']
 ): string {
   if (!pred) return 'Nav prognozes';
-  if (stage === 'group') return `${pred.home_score}–${pred.away_score}`;
-  return pred.winner_pick ?? '—';
+  return `${pred.home_score}–${pred.away_score}`;
 }
 
 function resultText(
-  stage: string,
   res: HistoryData['history'][0]['games'][0]['result']
 ): string {
-  if (stage === 'group') return `${res.actual_home}–${res.actual_away}`;
-  return res.winner ?? '—';
+  const score = `${res.actual_home}–${res.actual_away}`;
+  return res.winner ? `${score} (${res.winner})` : score;
 }
 
 export default function HistorySection({ historyData }: { historyData: HistoryData }) {
@@ -51,10 +48,10 @@ export default function HistorySection({ historyData }: { historyData: HistoryDa
                   <div className="flex-1">
                     <p className="text-sm font-medium text-grey-900">{g.home_team} vs {g.away_team}</p>
                     <p className="text-sm text-grey-600">
-                      Mana prognoze: {predictionText(g.stage, g.prediction)}
+                      Mana prognoze: {predictionText(g.prediction)}
                     </p>
                     <p className="text-sm text-grey-600">
-                      Rezultāts: {resultText(g.stage, g.result)}
+                      Rezultāts: {resultText(g.result)}
                     </p>
                   </div>
                   <PointsBadge points={g.points} />
