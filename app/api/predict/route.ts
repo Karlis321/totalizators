@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     // Validate all open games are covered
     const submittedIds = new Set(predictions.map(p => p.game_id));
-    for (const gid of openGameIds) {
+    for (const gid of Array.from(openGameIds)) {
       if (!submittedIds.has(gid)) {
         return Response.json({ error: 'Aizpildi visus laukus.' }, { status: 422 });
       }
