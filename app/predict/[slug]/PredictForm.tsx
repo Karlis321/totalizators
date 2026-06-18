@@ -78,8 +78,7 @@ export default function PredictForm({
   const allFilled = games.every(g => {
     const inp = inputs[g.game_id];
     if (!inp) return false;
-    if (g.stage === 'group') return isValidScore(inp.home) && isValidScore(inp.away);
-    return inp.winner !== '';
+    return isValidScore(inp.home) && isValidScore(inp.away);
   });
 
   async function handleSubmit() {
@@ -90,9 +89,9 @@ export default function PredictForm({
         const inp = inputs[g.game_id];
         return {
           game_id: g.game_id,
-          home_score: g.stage === 'group' ? parseInt(inp.home, 10) : null,
-          away_score: g.stage === 'group' ? parseInt(inp.away, 10) : null,
-          winner_pick: g.stage === 'knockout' ? inp.winner : null,
+          home_score: parseInt(inp.home, 10),
+          away_score: parseInt(inp.away, 10),
+          winner_pick: null,
         };
       });
       const res = await fetch('/api/predict', {
