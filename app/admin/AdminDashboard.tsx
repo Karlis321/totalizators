@@ -29,7 +29,6 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
   const [resultInputs, setResultInputs] = useState<Record<string, { home: string; away: string; winner: string }>>({});
   const [expandedResults, setExpandedResults] = useState(false);
-  const [fetchingResults, setFetchingResults] = useState(false);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -121,31 +120,6 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
     }
   }
 
-  // ── Manual fetch results ─────────────────────────────────────────────────
-  async function handleFetchResults(date?: string) {
-    setFetchingResults(true);
-    const url = date
-      ? `/api/cron/fetch-results?date=${date}`
-      : '/api/cron/fetch-results';
-    try {
-      const res = await fetch(url, { headers: authHeaders(), cache: 'no-store' });
-      const data = await res.json();
-      if (res.ok) {
-        const msg = data.saved > 0
-          ? `✓ ${data.saved} rezultāt${data.saved === 1 ? 's' : 'i'} importēti (${data.date})`
-          : `Nav jaunu rezultātu (${data.date})`;
-        setToast({ message: msg, variant: 'success' });
-        if (data.saved > 0) { setTimeout(fetchSchedule, 500); }
-      } else {
-        setToast({ message: data.error ?? 'API kļūda', variant: 'error' });
-      }
-    } catch {
-      setToast({ message: 'Savienojuma kļūda', variant: 'error' });
-    } finally {
-      setFetchingResults(false);
-    }
-  }
-
   const allDates = schedule
     ? Array.from(new Set(schedule.schedule.map(d => d.date))).sort()
     : [];
@@ -177,12 +151,13 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
         <span className="text-base font-semibold text-grey-900">⚽ Totalizators — Admin</span>
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => { fetchStatus(); fetchSchedule(); }}
             className="text-xs text-grey-500 border border-grey-200 rounded-lg px-2 py-1"
           >
             ↻ Atjaunot
           </button>
-          <button onClick={onLogout} className="text-sm text-grey-600 font-medium">Iziet</button>
+          <button type="button" onClick={onLogout} className="text-sm text-grey-600 font-medium">Iziet</button>
         </div>
       </header>
 
@@ -267,17 +242,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
       {/* ── Section 3: Result entry ──────────────────────────────────── */}
       <section className="px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold text-grey-900">Rezultātu Ievade</h2>
-          <button
-            type="button"
-            onClick={() => handleFetchResults()}
-            disabled={fetchingResults}
-            className="text-xs font-medium text-brand-green border border-brand-green rounded-lg px-3 py-1.5 disabled:opacity-50"
-          >
-            {fetchingResults ? '...' : '↓ Importēt'}
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-grey-900 mb-3">Rezultātu Ievade</h2>
 
         {pendingGames.length === 0 && completedGames.length > 0 && (
           <p className="text-sm text-green-700 font-medium py-6 text-center">✓ Visi rezultāti ievadīti.</p>
