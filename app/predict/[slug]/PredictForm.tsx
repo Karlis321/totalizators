@@ -20,17 +20,20 @@ function isValidScore(v: string) {
 
 export default function PredictForm({
   slug,
+  displayName,
   games: initialGames,
   alreadySubmitted: initialSubmitted,
 }: {
   slug: string;
+  displayName: string;
   games: GameWithPrediction[];
   alreadySubmitted: boolean;
 }) {
-  // Write slug to localStorage so BottomNav can link to this page
+  // Write identity to localStorage so BottomNav + AppHeader work on direct links
   useEffect(() => {
     localStorage.setItem('member_slug', slug);
-  }, [slug]);
+    localStorage.setItem('member_display_name', displayName);
+  }, [slug, displayName]);
 
   const [games, setGames] = useState(initialGames);
   const [inputs, setInputs] = useState<Record<string, InputState>>(() => {

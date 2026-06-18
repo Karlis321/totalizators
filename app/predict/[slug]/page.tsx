@@ -109,7 +109,7 @@ export default async function PredictPage({ params }: { params: { slug: string }
             </p>
             <p className="text-sm text-grey-600">Ievadi savas prognozes</p>
           </div>
-          <PredictForm slug={slug} games={gamesWithPreds} alreadySubmitted={alreadySubmitted} />
+          <PredictForm slug={slug} displayName={member.display_name} games={gamesWithPreds} alreadySubmitted={alreadySubmitted} />
         </>
       ) : (
         <div className="mx-4 mb-4 px-4 py-3 rounded-xl text-sm font-medium bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe]">
