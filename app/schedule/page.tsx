@@ -5,7 +5,7 @@ import { DateSection } from './DateSection';
 import { getGames, getResults } from '@/lib/sheets';
 import type { DateGroup } from './types';
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 async function getSchedule() {
   const [games, results] = await Promise.all([getGames(), getResults()]);

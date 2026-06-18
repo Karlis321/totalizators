@@ -35,9 +35,12 @@ export function todayEET(): string {
 export function roundLabel(round: string, group: string): string {
   if (round === 'group') return `${group} rinda`;
   const map: Record<string, string> = {
-    R32: '1/32 fināls', R16: '1/16 fināls',
-    QF: 'Ceturtdaļfināls', SF: 'Pusfināls',
-    bronze: 'Bronzas spēle', final: 'Fināls',
+    round_of_32:   '1/32 fināls',
+    round_of_16:   '1/16 fināls',
+    quarter_final: 'Ceturtdaļfināls',
+    semi_final:    'Pusfināls',
+    third_place:   'Bronzas spēle',
+    final:         'Fināls',
   };
   return map[round] ?? round;
 }

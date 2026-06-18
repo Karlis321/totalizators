@@ -6,10 +6,15 @@ import type { DateGroup, GameRow, GameResult } from './types';
 function ScoreDisplay({ game }: { game: GameRow }) {
   const r: GameResult = game.result;
   if (!r) return <span className="text-grey-400 font-medium">vs</span>;
-  if (game.stage === 'knockout' && r.winner) {
-    return <span className="text-grey-900 font-bold text-xs leading-tight text-center">{r.winner}<br />✓</span>;
+  const score = `${r.actual_home} – ${r.actual_away}`;
+  if (r.winner) {
+    return (
+      <span className="text-grey-900 font-bold text-xs leading-tight text-center">
+        {score}<br /><span className="text-grey-500 font-normal">({r.winner})</span>
+      </span>
+    );
   }
-  return <span className="text-grey-900 font-bold">{r.actual_home} – {r.actual_away}</span>;
+  return <span className="text-grey-900 font-bold">{score}</span>;
 }
 
 export function DateSection({ date, games }: DateGroup) {
