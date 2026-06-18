@@ -5,7 +5,7 @@ import PredictForm from './PredictForm';
 import HistorySection from './HistorySection';
 import { formatDateLv } from '@/lib/utils';
 import {
-  getMember, getOpenDate, getGamesForDate,
+  getMember, getOpenDates, getGamesForDates,
   getGames, getResults, getAllPredictionsForMember, getPointsForMember,
 } from '@/lib/sheets';
 import AutoRefresh from '@/components/AutoRefresh';
@@ -18,8 +18,8 @@ export default async function PredictPage({ params }: { params: { slug: string }
   const member = await getMember(slug);
   if (!member) notFound();
 
-  const [openDate, allGames, results, predictions, memberPoints] = await Promise.all([
-    getOpenDate(),
+  const [openDates, allGames, results, predictions, memberPoints] = await Promise.all([
+    getOpenDates(),
     getGames(),
     getResults(),
     getAllPredictionsForMember(slug),
@@ -27,7 +27,7 @@ export default async function PredictPage({ params }: { params: { slug: string }
   ]);
 
   // ── Open day games + predictions ──
-  const openGames = openDate ? await getGamesForDate(openDate) : [];
+  const openGames = openDates.length > 0 ? await getGamesForDates(openDates) : [];
   const predMap: Record<string, typeof predictions[0]> = {};
   for (const p of predictions) predMap[p.game_id] = p;
 
@@ -100,10 +100,12 @@ export default async function PredictPage({ params }: { params: { slug: string }
 
       <AutoRefresh intervalMs={15000} />
 
-      {openDate ? (
+      {openDates.length > 0 ? (
         <>
           <div className="px-4 mb-3">
-            <p className="text-lg font-semibold text-grey-900">{formatDateLv(openDate)}</p>
+            <p className="text-lg font-semibold text-grey-900">
+              {openDates.length === 1 ? formatDateLv(openDates[0]) : `${openDates.length} dienas atvērtas`}
+            </p>
             <p className="text-sm text-grey-600">Ievadi savas prognozes</p>
           </div>
           <PredictForm slug={slug} games={gamesWithPreds} alreadySubmitted={alreadySubmitted} />

@@ -144,6 +144,11 @@ export const getGamesForDate = unstable_cache(
   { revalidate: 300 }
 );
 
+export async function getGamesForDates(dates: string[]): Promise<Game[]> {
+  const games = await getGames();
+  return games.filter(g => dates.includes(g.date));
+}
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 async function readConfig(): Promise<Record<string, string>> {
@@ -153,15 +158,21 @@ async function readConfig(): Promise<Record<string, string>> {
   return map;
 }
 
-export const getOpenDate = unstable_cache(
-  async (): Promise<string | null> => {
-    console.log('[sheets] getOpenDate');
+export const getOpenDates = unstable_cache(
+  async (): Promise<string[]> => {
+    console.log('[sheets] getOpenDates');
     const config = await readConfig();
-    return config['open_date'] || null;
+    const val = config['open_date'] || '';
+    return val ? val.split(',').map(d => d.trim()).filter(Boolean) : [];
   },
   ['open_date'],
   { revalidate: 10, tags: ['open_date'] }
 );
+
+export async function getOpenDate(): Promise<string | null> {
+  const dates = await getOpenDates();
+  return dates[0] ?? null;
+}
 
 export const getScoringConfig = unstable_cache(
   async (): Promise<ScoringConfig> => {
@@ -179,17 +190,33 @@ export const getScoringConfig = unstable_cache(
   { revalidate: 300 }
 );
 
-export async function setOpenDate(date: string): Promise<void> {
+export async function addOpenDate(date: string): Promise<void> {
   const rows = await readSheet('Config!A:B');
   const rowIndex = rows.findIndex(r => r[0] === 'open_date');
-  if (rowIndex !== -1) {
-    await updateRange(`Config!B${rowIndex + 2}`, [[date]]);
+  if (rowIndex === -1) return;
+  const current = rows[rowIndex][1] || '';
+  const dates = current ? current.split(',').map(d => d.trim()).filter(Boolean) : [];
+  if (!dates.includes(date)) {
+    await updateRange(`Config!B${rowIndex + 2}`, [[[...dates, date].join(',')]]);
   }
   revalidateTag('open_date');
 }
 
+export async function removeOpenDate(date: string): Promise<void> {
+  const rows = await readSheet('Config!A:B');
+  const rowIndex = rows.findIndex(r => r[0] === 'open_date');
+  if (rowIndex === -1) return;
+  const current = rows[rowIndex][1] || '';
+  const dates = current ? current.split(',').map(d => d.trim()).filter(Boolean) : [];
+  await updateRange(`Config!B${rowIndex + 2}`, [[dates.filter(d => d !== date).join(',')]]);
+  revalidateTag('open_date');
+}
+
 export async function clearOpenDate(): Promise<void> {
-  await setOpenDate('');
+  const rows = await readSheet('Config!A:B');
+  const rowIndex = rows.findIndex(r => r[0] === 'open_date');
+  if (rowIndex !== -1) await updateRange(`Config!B${rowIndex + 2}`, [['']]);
+  revalidateTag('open_date');
 }
 
 // ─── Predictions ─────────────────────────────────────────────────────────────
@@ -233,9 +260,9 @@ export async function upsertPrediction(p: Prediction): Promise<void> {
 }
 
 export async function getSubmissionStatus(
-  openDate: string
+  openDates: string[]
 ): Promise<{ member_id: string; display_name: string; submitted: boolean }[]> {
-  const [members, games] = await Promise.all([getMembers(), getGamesForDate(openDate)]);
+  const [members, games] = await Promise.all([getMembers(), getGamesForDates(openDates)]);
   const gameIds = games.map(g => g.game_id);
   const predictions = await getAllPredictionsForDate(gameIds);
 

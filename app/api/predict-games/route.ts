@@ -1,4 +1,4 @@
-import { getMember, getOpenDate, getGamesForDate, getPredictions } from '@/lib/sheets';
+import { getMember, getOpenDates, getGamesForDates, getPredictions } from '@/lib/sheets';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +11,10 @@ export async function GET(request: Request) {
     const member = await getMember(slug);
     if (!member) return Response.json({ error: 'Not found' }, { status: 404 });
 
-    const openDate = await getOpenDate();
-    if (!openDate) return Response.json({ games: [] });
+    const openDates = await getOpenDates();
+    if (openDates.length === 0) return Response.json({ games: [] });
 
-    const games = await getGamesForDate(openDate);
+    const games = await getGamesForDates(openDates);
     const predictions = await getPredictions(slug, games.map(g => g.game_id));
 
     const predMap: Record<string, typeof predictions[0]> = {};

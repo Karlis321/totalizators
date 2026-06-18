@@ -1,4 +1,4 @@
-import { getMember, getOpenDate, getGamesForDate, upsertPrediction } from '@/lib/sheets';
+import { getMember, getOpenDates, getGamesForDates, upsertPrediction } from '@/lib/sheets';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,11 +19,11 @@ export async function POST(request: Request) {
     if (!member) return Response.json({ error: 'Dalībnieks nav atrasts.' }, { status: 404 });
 
     // Validate day is open
-    const openDate = await getOpenDate();
-    if (!openDate) return Response.json({ error: 'Nav atvērta neviena diena.' }, { status: 409 });
+    const openDates = await getOpenDates();
+    if (openDates.length === 0) return Response.json({ error: 'Nav atvērta neviena diena.' }, { status: 409 });
 
     // Get the authoritative game list from Sheets (source of truth)
-    const openGames = await getGamesForDate(openDate);
+    const openGames = await getGamesForDates(openDates);
     if (openGames.length === 0) {
       return Response.json({ error: 'Šajā dienā nav spēļu.' }, { status: 409 });
     }

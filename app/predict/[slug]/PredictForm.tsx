@@ -3,9 +3,10 @@ import { useEffect, useState, useCallback } from 'react';
 import RoundBadge from '@/components/RoundBadge';
 import Banner from '@/components/Banner';
 import Toast from '@/components/Toast';
+import { formatDateShortLv } from '@/lib/utils';
 
 type GameWithPrediction = {
-  game_id: string; time_eet: string; home_team: string; away_team: string;
+  game_id: string; date: string; time_eet: string; home_team: string; away_team: string;
   group: string; round: string; stage: string;
   prediction: { home_score: number | null; away_score: number | null; winner_pick: string | null; submitted_at: string } | null;
 };
@@ -137,8 +138,13 @@ export default function PredictForm({
       )}
 
       <div className="px-4 space-y-3">
-        {games.map(game => (
-          <div key={game.game_id} className="bg-white rounded-xl border border-grey-200 p-4 shadow-sm">
+        {games.map((game, i) => {
+          const showDateHeader = i === 0 || game.date !== games[i - 1].date;
+          return (<div key={game.game_id}>
+          {showDateHeader && games.some(g => g.date !== games[0].date) && (
+            <p className="text-sm font-semibold text-grey-600 pt-2 pb-1">{formatDateShortLv(game.date)}</p>
+          )}
+          <div className="bg-white rounded-xl border border-grey-200 p-4 shadow-sm">
             {/* Both group and knockout use score inputs */}
             <div className="flex items-center justify-center gap-3">
               <span className="text-base font-semibold text-grey-900 flex-1 text-right">{game.home_team}</span>
@@ -171,7 +177,8 @@ export default function PredictForm({
               <RoundBadge round={game.round} group={game.group} />
             </div>
           </div>
-        ))}
+          </div>);
+        })}
       </div>
 
       {/* Sticky submit */}

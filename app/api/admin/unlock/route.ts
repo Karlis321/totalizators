@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { requireAdmin } from '@/lib/auth';
-import { getGames, setOpenDate } from '@/lib/sheets';
+import { getGames, addOpenDate } from '@/lib/sheets';
 
 export async function POST(request: Request) {
   const err = requireAdmin(request);
@@ -19,8 +19,8 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Nav spēļu šajā datumā.' }, { status: 400 });
     }
 
-    await setOpenDate(date);
-    return Response.json({ success: true, open_date: date });
+    await addOpenDate(date);
+    return Response.json({ success: true, date });
   } catch (err) {
     console.error('[admin/unlock]', err);
     return Response.json({ error: 'Servera kļūda. Mēģini vēlreiz.' }, { status: 500 });

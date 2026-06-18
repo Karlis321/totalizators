@@ -6,7 +6,7 @@ import { formatDateShortLv, todayEET } from '@/lib/utils';
 
 type MemberStatus = { member_id: string; display_name: string; submitted: boolean };
 type StatusData = {
-  open_day: string | null;
+  open_days: string[];
   submitted_count: number; total_count: number; all_submitted: boolean;
   members: MemberStatus[];
 };
@@ -17,9 +17,9 @@ type Game = {
 };
 type ScheduleData = { schedule: { date: string; games: Game[] }[] };
 
-function dateStatus(date: string, openDay: string | null): 'open' | 'past' | 'locked' {
+function dateStatus(date: string, openDays: string[]): 'open' | 'past' | 'locked' {
   const today = todayEET();
-  if (date === openDay) return 'open';
+  if (openDays.includes(date)) return 'open';
   if (date < today) return 'past';
   return 'locked';
 }
@@ -64,7 +64,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
   // ── Unlock ──────────────────────────────────────────────────────────────
   async function handleUnlock(date: string) {
-    setStatus(prev => prev ? { ...prev, open_day: date, submitted_count: 0, all_submitted: false, members: prev.members.map(m => ({ ...m, submitted: false })) } : prev);
+    setStatus(prev => prev ? { ...prev, open_days: [...prev.open_days, date], submitted_count: 0, all_submitted: false, members: prev.members.map(m => ({ ...m, submitted: false })) } : prev);
     const res = await fetch('/api/admin/unlock', {
       method: 'POST',
       headers: authHeaders(),
@@ -80,21 +80,19 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   }
 
   // ── Lock ────────────────────────────────────────────────────────────────
-  async function handleLock() {
-    const count = status?.submitted_count ?? 0;
+  async function handleLock(date: string) {
     setDialog({
-      title: `Aizvērt prognozēšanu ${formatDateShortLv(status?.open_day ?? '')}?`,
-      warning: count > 0 ? `⚠️ Šai dienai jau ir ${count} iesniegumi.` : undefined,
+      title: `Aizvērt ${formatDateShortLv(date)}?`,
       onConfirm: async () => {
         setDialog(null);
-        setStatus(prev => prev ? { ...prev, open_day: null } : prev);
+        setStatus(prev => prev ? { ...prev, open_days: prev.open_days.filter(d => d !== date) } : prev);
         const res = await fetch('/api/admin/lock', {
           method: 'POST',
           headers: authHeaders(),
-          body: '{}',
+          body: JSON.stringify({ date }),
         });
         if (res.ok) {
-          setToast({ message: '✓ Diena aizvērta.', variant: 'success' });
+          setToast({ message: `✓ ${formatDateShortLv(date)} aizvērts.`, variant: 'success' });
           setTimeout(fetchStatus, 1500);
         } else {
           setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
@@ -154,7 +152,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
     ? schedule.schedule.flatMap(d => d.games).filter(g => g.result)
     : [];
 
-  const showStatusSection = status?.open_day && !status.all_submitted;
+  const showStatusSection = status && status.open_days.length > 0 && !status.all_submitted;
 
   if (loading) {
     return (
@@ -181,11 +179,11 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       </header>
 
       {/* Open day banner */}
-      {status?.open_day ? (
+      {status && status.open_days.length > 0 ? (
         <div className="mx-4 mt-4 px-4 py-3 rounded-xl bg-green-50 border border-green-200 flex items-center justify-between">
           <div>
             <p className="text-xs text-green-700 font-medium uppercase tracking-wide">Atvērts</p>
-            <p className="text-sm font-bold text-green-900">{formatDateShortLv(status.open_day)}</p>
+            <p className="text-sm font-bold text-green-900">{status.open_days.map(d => formatDateShortLv(d)).join(', ')}</p>
           </div>
           <span className="text-2xl">🟢</span>
         </div>
@@ -207,7 +205,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
             <p className="text-sm text-grey-400 py-4 text-center">Nav spēļu. Pārbaudi, vai spēļu tabula ir aizpildīta.</p>
           )}
           {allDates.map(date => {
-            const st = dateStatus(date, status?.open_day ?? null);
+            const st = dateStatus(date, status?.open_days ?? []);
             return (
               <div key={date} className={`flex items-center justify-between py-2.5 px-3 rounded-lg ${st === 'open' ? 'bg-green-50 border border-green-200' : 'border-b border-grey-100'}`}>
                 <span className={`text-sm font-medium ${st === 'open' ? 'text-green-900' : st === 'past' ? 'text-grey-400' : 'text-grey-900'}`}>
@@ -218,7 +216,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
                   {st === 'locked' && <span className="text-xs px-2 py-0.5 rounded-full bg-grey-100 text-grey-500">Slēgts</span>}
                   {st === 'past' && <span className="text-xs px-2 py-0.5 rounded-full bg-grey-50 text-grey-400">Pagājis</span>}
                   {st === 'open' && (
-                    <button type="button" onClick={handleLock} className="text-sm font-medium text-red-600 border border-red-300 rounded-lg px-3 py-1.5 active:bg-red-50">
+                    <button type="button" onClick={() => handleLock(date)} className="text-sm font-medium text-red-600 border border-red-300 rounded-lg px-3 py-1.5 active:bg-red-50">
                       Aizvērt
                     </button>
                   )}
@@ -242,7 +240,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       {showStatusSection && (
         <section className="px-4 pt-4 pb-3">
           <h2 className="text-xl font-bold text-grey-900 mb-3">
-            Iesniegumi — {formatDateShortLv(status!.open_day!)}
+            Iesniegumi — {status!.open_days.map(d => formatDateShortLv(d)).join(', ')}
             <span className="ml-2 text-sm font-normal text-grey-500">{status!.submitted_count}/{status!.total_count}</span>
           </h2>
           <div className="space-y-1">
