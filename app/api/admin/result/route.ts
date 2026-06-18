@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { requireAdmin } from '@/lib/auth';
 import { getGames, getMembers, getPredictions, upsertResult, upsertPoints, getScoringConfig } from '@/lib/sheets';
 import { calculatePoints } from '@/lib/scoring';

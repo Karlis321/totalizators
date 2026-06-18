@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { requireAdmin } from '@/lib/auth';
 import { getGames, setOpenDate } from '@/lib/sheets';
 

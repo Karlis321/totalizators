@@ -4,79 +4,106 @@ import BottomNav from '@/components/BottomNav';
 import PredictForm from './PredictForm';
 import HistorySection from './HistorySection';
 import { formatDateLv } from '@/lib/utils';
+import {
+  getMember, getOpenDate, getGamesForDate, getPredictions,
+  getGames, getResults, getAllPredictionsForMember, getPointsForMember,
+} from '@/lib/sheets';
 
 export const dynamic = 'force-dynamic';
 
-type GameWithPrediction = {
-  game_id: string; time_eet: string; home_team: string; away_team: string;
-  group: string; round: string; stage: string;
-  prediction: { home_score: number | null; away_score: number | null; winner_pick: string | null; submitted_at: string } | null;
-};
-
-type MemberData = {
-  member: { id: string; display_name: string };
-  open_day: { date: string; is_locked: boolean } | null;
-  games: GameWithPrediction[];
-};
-
-type HistoryData = {
-  member: { id: string; display_name: string };
-  total_points: number;
-  history: {
-    date: string;
-    games: {
-      game_id: string; home_team: string; away_team: string; stage: string;
-      prediction: { home_score: number | null; away_score: number | null; winner_pick: string | null } | null;
-      result: { actual_home: number | null; actual_away: number | null; winner: string | null };
-      points: number | null;
-    }[];
-  }[];
-};
-
-async function getMemberData(slug: string): Promise<MemberData | null> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/member/${slug}`, { cache: 'no-store' });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('member fetch failed');
-  return res.json();
-}
-
-async function getHistoryData(slug: string): Promise<HistoryData> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/member/${slug}/history`, { cache: 'no-store' });
-  if (!res.ok) return { member: { id: slug, display_name: '' }, total_points: 0, history: [] };
-  return res.json();
-}
-
 export default async function PredictPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
-  const [memberData, historyData] = await Promise.all([getMemberData(slug), getHistoryData(slug)]);
 
-  if (!memberData) notFound();
+  const member = await getMember(slug);
+  if (!member) notFound();
 
-  const { member, open_day, games } = memberData;
-  const alreadySubmitted = games.length > 0 && games.every(g => g.prediction !== null);
+  const [openDate, allGames, results, predictions, memberPoints] = await Promise.all([
+    getOpenDate(),
+    getGames(),
+    getResults(),
+    getAllPredictionsForMember(slug),
+    getPointsForMember(slug),
+  ]);
+
+  // ── Open day games + predictions ──
+  const openGames = openDate ? await getGamesForDate(openDate) : [];
+  const predMap: Record<string, typeof predictions[0]> = {};
+  for (const p of predictions) predMap[p.game_id] = p;
+
+  const gamesWithPreds = openGames.map(g => ({
+    ...g,
+    prediction: predMap[g.game_id]
+      ? {
+          home_score: predMap[g.game_id].home_score,
+          away_score: predMap[g.game_id].away_score,
+          winner_pick: predMap[g.game_id].winner_pick,
+          submitted_at: predMap[g.game_id].submitted_at,
+        }
+      : null,
+  }));
+
+  const alreadySubmitted = gamesWithPreds.length > 0 && gamesWithPreds.every(g => g.prediction !== null);
+
+  // ── History ──
+  const resultMap: Record<string, typeof results[0]> = {};
+  for (const r of results) resultMap[r.game_id] = r;
+
+  const pointsMap: Record<string, number> = {};
+  for (const p of memberPoints) pointsMap[p.game_id] = p.points;
+
+  const pastGames = allGames
+    .filter(g => resultMap[g.game_id])
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const dateMap: Record<string, typeof pastGames> = {};
+  for (const g of pastGames) {
+    if (!dateMap[g.date]) dateMap[g.date] = [];
+    dateMap[g.date].push(g);
+  }
+
+  const history = Object.entries(dateMap).map(([date, gms]) => ({
+    date,
+    games: gms.map(g => {
+      const pred = predMap[g.game_id] ?? null;
+      const res = resultMap[g.game_id];
+      return {
+        game_id: g.game_id,
+        home_team: g.home_team,
+        away_team: g.away_team,
+        stage: g.stage,
+        prediction: pred ? {
+          home_score: pred.home_score,
+          away_score: pred.away_score,
+          winner_pick: pred.winner_pick,
+        } : null,
+        result: {
+          actual_home: res.actual_home,
+          actual_away: res.actual_away,
+          winner: res.winner,
+        },
+        points: pointsMap[g.game_id] ?? null,
+      };
+    }),
+  }));
+
+  const total_points = memberPoints.reduce((sum, p) => sum + p.points, 0);
 
   return (
     <div className="max-w-lg mx-auto pb-32">
       <AppHeader />
 
-      {/* Member header */}
       <div className="px-4 pt-6 pb-4">
         <h1 className="text-2xl font-bold text-grey-900">Sveiks, {member.display_name}! 👋</h1>
         <p className="text-sm text-grey-600 mt-1">FIFA World Cup 2026 Totalizators</p>
       </div>
 
-      {/* Open day form */}
-      {open_day ? (
+      {openDate ? (
         <>
           <div className="px-4 mb-3">
-            <p className="text-lg font-semibold text-grey-900">{formatDateLv(open_day.date)}</p>
+            <p className="text-lg font-semibold text-grey-900">{formatDateLv(openDate)}</p>
             <p className="text-sm text-grey-600">Ievadi savas prognozes</p>
           </div>
-          <PredictForm
-            slug={slug}
-            games={games}
-            alreadySubmitted={alreadySubmitted}
-          />
+          <PredictForm slug={slug} games={gamesWithPreds} alreadySubmitted={alreadySubmitted} />
         </>
       ) : (
         <div className="mx-4 mb-4 px-4 py-3 rounded-xl text-sm font-medium bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe]">
@@ -84,8 +111,7 @@ export default async function PredictPage({ params }: { params: { slug: string }
         </div>
       )}
 
-      {/* History */}
-      <HistorySection historyData={historyData} />
+      <HistorySection historyData={{ total_points, history }} />
 
       <BottomNav />
     </div>

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Toast from '@/components/Toast';
 import { formatDateShortLv, todayEET } from '@/lib/utils';
@@ -31,52 +31,67 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
   const [dialog, setDialog] = useState<{ title: string; body?: string; warning?: string; onConfirm: () => void } | null>(null);
   const [resultInputs, setResultInputs] = useState<Record<string, { home: string; away: string; winner: string }>>({});
   const [expandedResults, setExpandedResults] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const authHeaders = useCallback(() => ({
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }), [token]);
+
+  // Always bust cache with a timestamp param
   const fetchStatus = useCallback(async () => {
-    const res = await fetch('/api/admin/status', {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    const res = await fetch(`/api/admin/status?t=${Date.now()}`, {
+      headers: authHeaders(),
+      cache: 'no-store',
     });
     if (res.status === 401) { onLogout(); return; }
     if (res.ok) setStatus(await res.json());
-  }, [token, onLogout]);
+  }, [token, onLogout, authHeaders]);
 
   const fetchSchedule = useCallback(async () => {
-    const res = await fetch('/api/schedule');
+    const res = await fetch(`/api/schedule?t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) setSchedule(await res.json());
   }, []);
 
   useEffect(() => {
-    fetchStatus();
-    fetchSchedule();
-    const interval = setInterval(fetchStatus, 30_000);
-    return () => clearInterval(interval);
+    Promise.all([fetchStatus(), fetchSchedule()]).finally(() => setLoading(false));
+    pollRef.current = setInterval(fetchStatus, 15_000); // poll every 15s
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchStatus, fetchSchedule]);
 
   function dismissToast() { setToast(null); }
 
-  // ── Unlock ───────────────────────────────────────────────────────────────
+  // ── Unlock ──────────────────────────────────────────────────────────────
   async function handleUnlock(date: string) {
-    // Check submission count for this date
     const submittedForDate = status?.open_day === date ? status.submitted_count : 0;
     setDialog({
       title: `Atbloķēt spēles ${formatDateShortLv(date)}?`,
       warning: submittedForDate > 0
-        ? `⚠️ Šai dienai jau ir ${submittedForDate} iesniegumi. Vai tiešām vēlaties atbloķēt?`
+        ? `⚠️ Šai dienai jau ir ${submittedForDate} iesniegumi.`
         : undefined,
       onConfirm: async () => {
         setDialog(null);
-        const res = await fetch('/api/admin/unlock', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ date }) });
+        // Optimistic update — show immediately
+        setStatus(prev => prev ? { ...prev, open_day: date, submitted_count: 0, all_submitted: false, members: prev.members.map(m => ({ ...m, submitted: false })) } : prev);
+        const res = await fetch('/api/admin/unlock', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ date }),
+        });
         if (res.ok) {
-          setToast({ message: `Atbloķēts: ${formatDateShortLv(date)}`, variant: 'success' });
-          fetchStatus();
+          setToast({ message: `✓ Atbloķēts: ${formatDateShortLv(date)}`, variant: 'success' });
+          // Refetch to confirm server state
+          setTimeout(fetchStatus, 500);
         } else {
           setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
+          fetchStatus(); // revert optimistic
         }
       },
     });
   }
 
-  // ── Lock ─────────────────────────────────────────────────────────────────
+  // ── Lock ────────────────────────────────────────────────────────────────
   async function handleLock() {
     const count = status?.submitted_count ?? 0;
     setDialog({
@@ -84,18 +99,25 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       warning: count > 0 ? `⚠️ Šai dienai jau ir ${count} iesniegumi.` : undefined,
       onConfirm: async () => {
         setDialog(null);
-        const res = await fetch('/api/admin/lock', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' });
+        // Optimistic update
+        setStatus(prev => prev ? { ...prev, open_day: null } : prev);
+        const res = await fetch('/api/admin/lock', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: '{}',
+        });
         if (res.ok) {
-          setToast({ message: 'Diena aizvērta.', variant: 'success' });
-          fetchStatus();
+          setToast({ message: '✓ Diena aizvērta.', variant: 'success' });
+          setTimeout(fetchStatus, 500);
         } else {
           setToast({ message: 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
+          fetchStatus();
         }
       },
     });
   }
 
-  // ── Save result ──────────────────────────────────────────────────────────
+  // ── Save result ─────────────────────────────────────────────────────────
   async function handleSaveResult(game: Game) {
     const inp = resultInputs[game.game_id] ?? { home: '', away: '', winner: '' };
     const body = game.stage === 'group'
@@ -103,19 +125,22 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
       : { game_id: game.game_id, actual_home: null, actual_away: null, winner: inp.winner };
 
     const confirmText = game.stage === 'group'
-      ? `Saglabāt rezultātu: ${game.home_team} ${inp.home} - ${inp.away} ${game.away_team}?`
-      : `Saglabāt rezultātu: ${inp.winner} uzvarēja?`;
+      ? `Saglabāt: ${game.home_team} ${inp.home} - ${inp.away} ${game.away_team}?`
+      : `Saglabāt: ${inp.winner} uzvarēja?`;
 
     setDialog({
       title: confirmText,
       onConfirm: async () => {
         setDialog(null);
-        const res = await fetch('/api/admin/result', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const res = await fetch('/api/admin/result', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(body),
+        });
         if (res.ok) {
-          setToast({ message: 'Rezultāts saglabāts!', variant: 'success' });
-          fetchSchedule();
-          // Clear inputs for this game
+          setToast({ message: '✓ Rezultāts saglabāts!', variant: 'success' });
           setResultInputs(prev => { const n = { ...prev }; delete n[game.game_id]; return n; });
+          setTimeout(fetchSchedule, 500);
         } else {
           const d = await res.json();
           setToast({ message: d.error ?? 'Kļūda. Mēģini vēlreiz.', variant: 'error' });
@@ -124,12 +149,10 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
     });
   }
 
-  // ── All game dates ───────────────────────────────────────────────────────
   const allDates = schedule
     ? Array.from(new Set(schedule.schedule.map(d => d.date))).sort()
     : [];
 
-  // ── Pending result games ─────────────────────────────────────────────────
   const pendingGames = schedule
     ? schedule.schedule.flatMap(d => d.games).filter(g => !g.result)
     : [];
@@ -139,34 +162,71 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
 
   const showStatusSection = status?.open_day && !status.all_submitted;
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-grey-500 text-sm">Ielādē...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-lg mx-auto pb-12">
-      {/* Admin header */}
+      {/* Header */}
       <header className="bg-white border-b border-grey-200 px-4 h-14 flex items-center justify-between sticky top-0 z-10">
         <span className="text-base font-semibold text-grey-900">⚽ Totalizators — Admin</span>
-        <button onClick={onLogout} className="text-sm text-grey-600 font-medium">Iziet</button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { fetchStatus(); fetchSchedule(); }}
+            className="text-xs text-grey-500 border border-grey-200 rounded-lg px-2 py-1"
+          >
+            ↻ Atjaunot
+          </button>
+          <button onClick={onLogout} className="text-sm text-grey-600 font-medium">Iziet</button>
+        </div>
       </header>
 
-      {/* ── Section 1: Day control ─────────────────────────────────────── */}
+      {/* Open day banner */}
+      {status?.open_day ? (
+        <div className="mx-4 mt-4 px-4 py-3 rounded-xl bg-green-50 border border-green-200 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-green-700 font-medium uppercase tracking-wide">Atvērts</p>
+            <p className="text-sm font-bold text-green-900">{formatDateShortLv(status.open_day)}</p>
+          </div>
+          <span className="text-2xl">🟢</span>
+        </div>
+      ) : (
+        <div className="mx-4 mt-4 px-4 py-3 rounded-xl bg-grey-100 border border-grey-200 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-grey-500 font-medium uppercase tracking-wide">Statuss</p>
+            <p className="text-sm font-bold text-grey-700">Nav atvērta neviena diena</p>
+          </div>
+          <span className="text-2xl">🔴</span>
+        </div>
+      )}
+
+      {/* ── Section 1: Day control ───────────────────────────────────── */}
       <section className="px-4 pt-6 pb-3">
         <h2 className="text-xl font-bold text-grey-900 mb-3">Dienas Kontrole</h2>
-        <div className="space-y-2">
+        <div className="space-y-1">
           {allDates.map(date => {
             const st = dateStatus(date, status?.open_day ?? null);
             return (
-              <div key={date} className="flex items-center justify-between py-2 border-b border-grey-100">
-                <span className="text-sm text-grey-900">{formatDateShortLv(date)}</span>
-                <div className="flex items-center gap-3">
-                  {st === 'open' && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-800">Atvērts</span>}
-                  {st === 'locked' && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-grey-100 text-grey-600">Slēgts</span>}
+              <div key={date} className={`flex items-center justify-between py-2.5 px-3 rounded-lg ${st === 'open' ? 'bg-green-50 border border-green-200' : 'border-b border-grey-100'}`}>
+                <span className={`text-sm font-medium ${st === 'open' ? 'text-green-900' : st === 'past' ? 'text-grey-400' : 'text-grey-900'}`}>
+                  {formatDateShortLv(date)}
+                </span>
+                <div className="flex items-center gap-2">
+                  {st === 'open' && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-800">Atvērts</span>}
+                  {st === 'locked' && <span className="text-xs px-2 py-0.5 rounded-full bg-grey-100 text-grey-500">Slēgts</span>}
                   {st === 'past' && <span className="text-xs px-2 py-0.5 rounded-full bg-grey-50 text-grey-400">Pagājis</span>}
                   {st === 'open' && (
-                    <button onClick={handleLock} className="text-sm font-medium text-red-600 border border-red-300 rounded-lg px-3 py-1.5">
+                    <button onClick={handleLock} className="text-sm font-medium text-red-600 border border-red-300 rounded-lg px-3 py-1.5 active:bg-red-50">
                       Aizvērt
                     </button>
                   )}
                   {st === 'locked' && (
-                    <button onClick={() => handleUnlock(date)} className="text-sm font-medium text-brand-green border border-brand-green rounded-lg px-3 py-1.5">
+                    <button onClick={() => handleUnlock(date)} className="text-sm font-medium text-brand-green border border-brand-green rounded-lg px-3 py-1.5 active:bg-green-50">
                       Atbloķēt
                     </button>
                   )}
@@ -177,45 +237,47 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
         </div>
       </section>
 
-      {/* ── Section 2: Submission status ──────────────────────────────── */}
+      {/* ── Section 2: Submission status ────────────────────────────── */}
       {showStatusSection && (
-        <section className="px-4 pt-6 pb-3">
+        <section className="px-4 pt-4 pb-3">
           <h2 className="text-xl font-bold text-grey-900 mb-3">
-            Iesniegumu Statuss — {formatDateShortLv(status!.open_day!)}
+            Iesniegumi — {formatDateShortLv(status!.open_day!)}
+            <span className="ml-2 text-sm font-normal text-grey-500">{status!.submitted_count}/{status!.total_count}</span>
           </h2>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {status!.members.map(m => (
-              <div key={m.member_id} className="flex items-center gap-3 py-2 border-b border-grey-100">
-                <span className={`text-lg font-bold w-6 ${m.submitted ? 'text-green-600' : 'text-red-400'}`}>
+              <div key={m.member_id} className={`flex items-center gap-3 py-2.5 px-3 rounded-lg ${m.submitted ? 'bg-green-50' : 'bg-grey-50'}`}>
+                <span className={`text-lg font-bold w-6 text-center ${m.submitted ? 'text-green-600' : 'text-red-400'}`}>
                   {m.submitted ? '✓' : '✕'}
                 </span>
                 <span className="text-sm font-medium text-grey-900 flex-1">{m.display_name}</span>
-                <span className="text-xs text-grey-500">{m.submitted ? 'iesniegts' : 'nav iesniegts'}</span>
+                <span className="text-xs text-grey-500">{m.submitted ? 'iesniegts' : 'gaida'}</span>
               </div>
             ))}
           </div>
-          <p className="text-sm font-semibold text-grey-700 mt-3">
-            {status!.submitted_count} / {status!.total_count} iesniegts
-          </p>
         </section>
       )}
 
-      {/* ── Section 3: Result entry ────────────────────────────────────── */}
-      <section className="px-4 pt-6 pb-3">
+      {/* ── Section 3: Result entry ──────────────────────────────────── */}
+      <section className="px-4 pt-4 pb-3">
         <h2 className="text-xl font-bold text-grey-900 mb-3">Rezultātu Ievade</h2>
 
         {pendingGames.length === 0 && completedGames.length > 0 && (
-          <p className="text-sm text-green-700 font-medium py-6 text-center">✓ Visi rezultāti ir ievadīti.</p>
+          <p className="text-sm text-green-700 font-medium py-6 text-center">✓ Visi rezultāti ievadīti.</p>
+        )}
+
+        {pendingGames.length === 0 && completedGames.length === 0 && (
+          <p className="text-sm text-grey-400 py-4 text-center">Nav spēļu.</p>
         )}
 
         {pendingGames.map(game => {
           const inp = resultInputs[game.game_id] ?? { home: '', away: '', winner: '' };
           const canSave = game.stage === 'group'
-            ? (inp.home !== '' && inp.away !== '' && !isNaN(parseInt(inp.home, 10)) && !isNaN(parseInt(inp.away, 10)))
+            ? inp.home !== '' && inp.away !== '' && !isNaN(parseInt(inp.home, 10)) && !isNaN(parseInt(inp.away, 10))
             : inp.winner !== '';
 
           return (
-            <div key={game.game_id} className="bg-white border border-grey-200 rounded-xl p-4 mx-0 mb-3 shadow-sm">
+            <div key={game.game_id} className="bg-white border border-grey-200 rounded-xl p-4 mb-3 shadow-sm">
               <p className="text-sm font-semibold text-grey-900">{game.home_team} vs {game.away_team}</p>
               <p className="text-xs text-grey-500 mt-0.5">{game.time_eet} EET · {game.round === 'group' ? `Grupa ${game.group}` : game.round}</p>
 
@@ -264,7 +326,6 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
           );
         })}
 
-        {/* Completed results */}
         {completedGames.length > 0 && (
           <div className="mt-4">
             <button
@@ -276,7 +337,7 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
             {expandedResults && (
               <div className="mt-2 space-y-1">
                 {completedGames.map(game => (
-                  <div key={game.game_id} className="px-0 py-2 flex items-center justify-between border-b border-grey-100">
+                  <div key={game.game_id} className="py-2 px-3 flex items-center justify-between rounded-lg bg-grey-50">
                     <span className="text-sm text-grey-900">
                       {game.home_team} vs {game.away_team}
                       {' — '}
@@ -285,18 +346,14 @@ export default function AdminDashboard({ token, onLogout }: { token: string; onL
                         : `${game.result?.winner} ✓`}
                     </span>
                     <button
-                      onClick={() => {
-                        setResultInputs(p => ({
-                          ...p,
-                          [game.game_id]: {
-                            home: game.result?.actual_home != null ? String(game.result.actual_home) : '',
-                            away: game.result?.actual_away != null ? String(game.result.actual_away) : '',
-                            winner: game.result?.winner ?? '',
-                          },
-                        }));
-                        // Move to pending view by temporarily removing result from schedule
-                        // (will re-fetch after save)
-                      }}
+                      onClick={() => setResultInputs(p => ({
+                        ...p,
+                        [game.game_id]: {
+                          home: game.result?.actual_home != null ? String(game.result.actual_home) : '',
+                          away: game.result?.actual_away != null ? String(game.result.actual_away) : '',
+                          winner: game.result?.winner ?? '',
+                        },
+                      }))}
                       className="text-xs text-brand-green font-medium ml-2"
                     >
                       Labot

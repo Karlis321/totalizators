@@ -1,5 +1,7 @@
 import { getMember, getOpenDate, getGamesForDate, upsertPrediction } from '@/lib/sheets';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -8,7 +10,7 @@ export async function POST(request: Request) {
       predictions: { game_id: string; home_score: number | null; away_score: number | null; winner_pick: string | null }[];
     };
 
-    if (!member_id || !Array.isArray(predictions)) {
+    if (!member_id || !Array.isArray(predictions) || predictions.length === 0) {
       return Response.json({ error: 'Nederīgs pieprasījums.' }, { status: 400 });
     }
 
@@ -20,34 +22,37 @@ export async function POST(request: Request) {
     const openDate = await getOpenDate();
     if (!openDate) return Response.json({ error: 'Nav atvērta neviena diena.' }, { status: 409 });
 
-    // Validate all games belong to open date
+    // Get the authoritative game list from Sheets (source of truth)
     const openGames = await getGamesForDate(openDate);
+    if (openGames.length === 0) {
+      return Response.json({ error: 'Šajā dienā nav spēļu.' }, { status: 409 });
+    }
+
     const openGameIds = new Set(openGames.map(g => g.game_id));
     const openGameMap: Record<string, typeof openGames[0]> = {};
     for (const g of openGames) openGameMap[g.game_id] = g;
 
-    for (const pred of predictions) {
-      if (!openGameIds.has(pred.game_id)) {
-        return Response.json({ error: 'Spēle nepieder atvērtajai dienai.' }, { status: 422 });
-      }
-    }
+    // Only keep predictions for games that still exist in Sheets
+    // (handles the case where a game was deleted after the user loaded the page)
+    const validPredictions = predictions.filter(p => openGameIds.has(p.game_id));
 
-    // Validate all open games are covered
-    const submittedIds = new Set(predictions.map(p => p.game_id));
-    for (const gid of Array.from(openGameIds)) {
-      if (!submittedIds.has(gid)) {
-        return Response.json({ error: 'Aizpildi visus laukus.' }, { status: 422 });
-      }
+    // All currently-existing open games must be covered
+    const submittedIds = new Set(validPredictions.map(p => p.game_id));
+    const missing = openGames.filter(g => !submittedIds.has(g.game_id));
+    if (missing.length > 0) {
+      return Response.json({ error: 'Aizpildi visus laukus.' }, { status: 422 });
     }
 
     // Validate each prediction value
-    for (const pred of predictions) {
+    for (const pred of validPredictions) {
       const game = openGameMap[pred.game_id];
       if (game.stage === 'group') {
-        if (pred.home_score == null || pred.away_score == null ||
-            !Number.isInteger(pred.home_score) || !Number.isInteger(pred.away_score) ||
-            pred.home_score < 0 || pred.home_score > 20 ||
-            pred.away_score < 0 || pred.away_score > 20) {
+        if (
+          pred.home_score == null || pred.away_score == null ||
+          !Number.isInteger(pred.home_score) || !Number.isInteger(pred.away_score) ||
+          pred.home_score < 0 || pred.home_score > 20 ||
+          pred.away_score < 0 || pred.away_score > 20
+        ) {
           return Response.json({ error: 'Nederīgas vērtības.' }, { status: 422 });
         }
       } else {
@@ -58,9 +63,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Write all predictions
+    // Write all predictions to Sheets
     const submitted_at = new Date().toISOString();
-    await Promise.all(predictions.map(pred =>
+    await Promise.all(validPredictions.map(pred =>
       upsertPrediction({
         prediction_id: `P_${member_id}_${pred.game_id}`,
         member_id,

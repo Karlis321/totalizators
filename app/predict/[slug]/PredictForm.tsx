@@ -18,18 +18,23 @@ function isValidScore(v: string) {
 }
 
 export default function PredictForm({
-  slug, games, alreadySubmitted: initialSubmitted,
+  slug,
+  games: initialGames,
+  alreadySubmitted: initialSubmitted,
 }: {
   slug: string;
   games: GameWithPrediction[];
   alreadySubmitted: boolean;
 }) {
-  // Write slug to localStorage
-  useEffect(() => { localStorage.setItem('member_slug', slug); }, [slug]);
+  // Write slug to localStorage so BottomNav can link to this page
+  useEffect(() => {
+    localStorage.setItem('member_slug', slug);
+  }, [slug]);
 
+  const [games, setGames] = useState(initialGames);
   const [inputs, setInputs] = useState<Record<string, InputState>>(() => {
     const init: Record<string, InputState> = {};
-    for (const g of games) {
+    for (const g of initialGames) {
       init[g.game_id] = {
         home: g.prediction?.home_score != null ? String(g.prediction.home_score) : '',
         away: g.prediction?.away_score != null ? String(g.prediction.away_score) : '',
@@ -46,7 +51,30 @@ export default function PredictForm({
 
   const dismissToast = useCallback(() => setToast(null), []);
 
-  // All fields filled?
+  // Re-fetch games from server to stay in sync if admin removes a game
+  useEffect(() => {
+    fetch(`/api/predict-games?slug=${encodeURIComponent(slug)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.games) return;
+        setGames(data.games);
+        setInputs(prev => {
+          const next: Record<string, InputState> = {};
+          for (const g of data.games as GameWithPrediction[]) {
+            next[g.game_id] = prev[g.game_id] ?? {
+              home: g.prediction?.home_score != null ? String(g.prediction.home_score) : '',
+              away: g.prediction?.away_score != null ? String(g.prediction.away_score) : '',
+              winner: g.prediction?.winner_pick ?? '',
+            };
+          }
+          return next;
+        });
+        const allSubmitted = data.games.length > 0 && (data.games as GameWithPrediction[]).every(g => g.prediction !== null);
+        setSubmitted(allSubmitted);
+      })
+      .catch(() => {/* silently keep server-rendered data */});
+  }, [slug]);
+
   const allFilled = games.every(g => {
     const inp = inputs[g.game_id];
     if (!inp) return false;
@@ -76,6 +104,7 @@ export default function PredictForm({
         setSubmitted(true);
         setFlash(true);
         setTimeout(() => setFlash(false), 1500);
+        setToast({ message: 'Prognoze saglabāta ✓', variant: 'success' });
       } else {
         const data = await res.json();
         setToast({ message: data.error ?? 'Kļūda saglabājot. Mēģini vēlreiz.', variant: 'error' });
@@ -89,6 +118,15 @@ export default function PredictForm({
 
   function setInput(gameId: string, field: keyof InputState, value: string) {
     setInputs(prev => ({ ...prev, [gameId]: { ...prev[gameId], [field]: value } }));
+    if (submitted) setSubmitted(false); // mark as unsaved when editing
+  }
+
+  if (games.length === 0) {
+    return (
+      <div className="mx-4 mb-4 px-4 py-3 rounded-xl text-sm font-medium bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe]">
+        Nav spēļu šajā dienā.
+      </div>
+    );
   }
 
   return (
@@ -103,31 +141,29 @@ export default function PredictForm({
         {games.map(game => (
           <div key={game.game_id} className="bg-white rounded-xl border border-grey-200 p-4 shadow-sm">
             {game.stage === 'group' ? (
-              <>
-                <div className="flex items-center justify-center gap-3">
-                  <span className="text-base font-semibold text-grey-900 flex-1 text-right">{game.home_team}</span>
-                  <input
-                    type="number" inputMode="numeric" pattern="[0-9]*"
-                    min={0} max={20}
-                    value={inputs[game.game_id]?.home ?? ''}
-                    onChange={e => setInput(game.game_id, 'home', e.target.value)}
-                    placeholder="–"
-                    aria-label={`${game.home_team} goli`}
-                    className="w-14 h-12 text-2xl font-bold text-center text-grey-900 border-2 border-grey-300 rounded-lg bg-white focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  <span className="text-grey-400 mx-1">-</span>
-                  <input
-                    type="number" inputMode="numeric" pattern="[0-9]*"
-                    min={0} max={20}
-                    value={inputs[game.game_id]?.away ?? ''}
-                    onChange={e => setInput(game.game_id, 'away', e.target.value)}
-                    placeholder="–"
-                    aria-label={`${game.away_team} goli`}
-                    className="w-14 h-12 text-2xl font-bold text-center text-grey-900 border-2 border-grey-300 rounded-lg bg-white focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  <span className="text-base font-semibold text-grey-900 flex-1 text-left">{game.away_team}</span>
-                </div>
-              </>
+              <div className="flex items-center justify-center gap-3">
+                <span className="text-base font-semibold text-grey-900 flex-1 text-right">{game.home_team}</span>
+                <input
+                  type="number" inputMode="numeric" pattern="[0-9]*"
+                  min={0} max={20}
+                  value={inputs[game.game_id]?.home ?? ''}
+                  onChange={e => setInput(game.game_id, 'home', e.target.value)}
+                  placeholder="–"
+                  aria-label={`${game.home_team} goli`}
+                  className="w-14 h-12 text-2xl font-bold text-center text-grey-900 border-2 border-grey-300 rounded-lg bg-white focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-grey-400 mx-1">-</span>
+                <input
+                  type="number" inputMode="numeric" pattern="[0-9]*"
+                  min={0} max={20}
+                  value={inputs[game.game_id]?.away ?? ''}
+                  onChange={e => setInput(game.game_id, 'away', e.target.value)}
+                  placeholder="–"
+                  aria-label={`${game.away_team} goli`}
+                  className="w-14 h-12 text-2xl font-bold text-center text-grey-900 border-2 border-grey-300 rounded-lg bg-white focus:border-brand-green focus:outline-none focus:ring-2 focus:ring-brand-green/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-base font-semibold text-grey-900 flex-1 text-left">{game.away_team}</span>
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <button
@@ -163,7 +199,7 @@ export default function PredictForm({
         ))}
       </div>
 
-      {/* Sticky submit button */}
+      {/* Sticky submit */}
       <div className="fixed bottom-[54px] left-0 right-0 bg-white border-t border-grey-200 px-4 py-3 z-20 max-w-lg mx-auto">
         <button
           onClick={handleSubmit}
